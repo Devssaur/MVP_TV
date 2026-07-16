@@ -1,8 +1,21 @@
 import os
+import logging
 from flask import Blueprint, jsonify, request
 from supabase import Client, create_client
+from routes.security import require_auth, get_current_user_context
+
+try:
+    from gotrue.errors import AuthApiError
+except Exception:  # pragma: no cover
+    AuthApiError = Exception
+
+try:
+    from postgrest.exceptions import APIError as PostgrestAPIError
+except Exception:  # pragma: no cover
+    PostgrestAPIError = Exception
 
 admin_bp = Blueprint("admin_bp", __name__)
+logger = logging.getLogger(__name__)
 
 
 VALID_PROFILES = ("Solicitante", "CCM", "Administrador", "SIC")
@@ -38,14 +51,13 @@ def _registrar_log(supabase: Client, evento: str, payload: dict | None, usuario_
             "payload": payload or {},
         }).execute()
     except Exception:
-        # Log de auditoria nao deve quebrar a funcionalidade principal.
-        pass
+        logger.exception('Falha ao registrar log de auditoria evento=%s', evento)
 
 
 def _selecionar_usuario_por_id(supabase: Client, usuario_id: str):
     return (
         supabase.table("usuarios")
-        .select("id, nome, email, perfil, aprovado, empresa, area, created_at")
+        .select("id, nome, email, perfil, usando_como, aprovado, empresa, area, created_at")
         .eq("id", usuario_id)
         .single()
         .execute()
@@ -53,6 +65,7 @@ def _selecionar_usuario_por_id(supabase: Client, usuario_id: str):
 
 
 @admin_bp.route("/logs", methods=["GET"])
+@require_auth(("Administrador",))
 def listar_logs():
     try:
         supabase = _get_supabase_client()
@@ -64,31 +77,43 @@ def listar_logs():
             .execute()
         )
         return jsonify({"logs": result.data, "total": len(result.data)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao consultar logs.'}), 401
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel consultar os logs.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao listar logs')
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios", methods=["GET"])
+@require_auth(("Administrador",))
 def listar_usuarios():
     try:
         supabase = _get_supabase_client()
         result = (
             supabase.table("usuarios")
-            .select("id, nome, email, perfil, aprovado, empresa, area, created_at")
+            .select("id, nome, email, perfil, usando_como, aprovado, empresa, area, created_at")
             .order("created_at", desc=True)
             .execute()
         )
         return jsonify({"usuarios": result.data, "total": len(result.data)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao consultar usuarios.'}), 401
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel consultar os usuarios.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao listar usuarios')
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>/aprovar", methods=["POST"])
+@require_auth(("Administrador",))
 def aprovar_usuario(usuario_id):
     payload  = request.get_json(silent=True) or {}
     aprovado = payload.get("aprovado", True)   # True = aprovar, False = bloquear
     perfil   = _normalize_profile(payload.get("perfil"))  # opcional: alterar perfil ao mesmo tempo
-    ator_id  = payload.get("ator_id")
+    ator_id = get_current_user_context().get('id')
 
     update_data = {"aprovado": bool(aprovado)}
     if perfil:
@@ -129,15 +154,21 @@ def aprovar_usuario(usuario_id):
         )
 
         return jsonify({"mensagem": "Usuário atualizado com sucesso.", "usuario": sel.data}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao atualizar usuario.'}), 401
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel atualizar os dados do usuario.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao aprovar usuario id=%s', usuario_id)
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>/perfil", methods=["PUT"])
+@require_auth(("Administrador",))
 def alterar_perfil(usuario_id):
     payload = request.get_json(silent=True) or {}
     perfil  = _normalize_profile(payload.get("perfil"))
-    ator_id = payload.get("ator_id")
+    ator_id = get_current_user_context().get('id')
     if perfil not in VALID_PROFILES:
         return jsonify({"erro": "Perfil inválido."}), 400
 
@@ -148,7 +179,7 @@ def alterar_perfil(usuario_id):
         antes = antes_sel.data if antes_sel else None
 
         supabase.table("usuarios") \
-            .update({"perfil": perfil}) \
+            .update({"usando_como": perfil}) \
             .eq("id", usuario_id) \
             .execute()
 
@@ -162,21 +193,27 @@ def alterar_perfil(usuario_id):
             "ADMIN_ALTEROU_PERFIL_USUARIO",
             {
                 "alvo_usuario_id": usuario_id,
-                "antes": {"perfil": (antes or {}).get("perfil")},
-                "depois": {"perfil": sel.data.get("perfil")},
+                "antes": {"usando_como": (antes or {}).get("usando_como") or (antes or {}).get("perfil")},
+                "depois": {"usando_como": sel.data.get("usando_como") or sel.data.get("perfil")},
             },
             ator_id,
         )
 
         return jsonify({"mensagem": "Perfil atualizado.", "usuario": sel.data}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao alterar perfil.'}), 401
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel salvar o novo perfil.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao alterar perfil usuario id=%s', usuario_id)
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>", methods=["PUT"])
+@require_auth(("Administrador",))
 def editar_usuario(usuario_id):
     payload = request.get_json(silent=True) or {}
-    ator_id = payload.get("ator_id")
+    ator_id = get_current_user_context().get('id')
 
     nome = (payload.get("nome") or "").strip()
     email = (payload.get("email") or "").strip().lower()
@@ -232,14 +269,20 @@ def editar_usuario(usuario_id):
         )
 
         return jsonify({"mensagem": "Cadastro atualizado com sucesso.", "usuario": sel.data}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao editar usuario.'}), 401
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel salvar os dados do usuario.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao editar usuario id=%s', usuario_id)
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>", methods=["DELETE"])
+@require_auth(("Administrador",))
 def excluir_usuario(usuario_id):
     payload = request.get_json(silent=True) or {}
-    ator_id = payload.get("ator_id")
+    ator_id = get_current_user_context().get('id')
 
     try:
         supabase = _get_supabase_client()
@@ -270,5 +313,10 @@ def excluir_usuario(usuario_id):
         )
 
         return jsonify({"mensagem": "Usuário excluído com sucesso."}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao excluir usuario.'}), 401
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel excluir o usuario.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao excluir usuario id=%s', usuario_id)
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500

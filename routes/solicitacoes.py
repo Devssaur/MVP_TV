@@ -1,15 +1,48 @@
 import os
 import base64
-import traceback
 import uuid
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request, current_app
 from supabase import Client, create_client
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from routes.security import require_auth, get_current_user_context
+
+try:
+    from gotrue.errors import AuthApiError
+except Exception:  # pragma: no cover
+    AuthApiError = Exception
+
+try:
+    from postgrest.exceptions import APIError as PostgrestAPIError
+except Exception:  # pragma: no cover
+    PostgrestAPIError = Exception
 
 load_dotenv()
 
 solicitacoes_bp = Blueprint("solicitacoes_bp", __name__)
+
+
+class CriarSafPayload(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+
+    notificador_id: str = Field(min_length=6, max_length=64)
+    titulo_falha: str = Field(min_length=3, max_length=200)
+    descricao_longa: str | None = Field(default=None, max_length=4000)
+    local_instalacao_id: str = Field(min_length=1, max_length=100)
+    local_instalacao: str | None = Field(default=None, max_length=200)
+    equipamento_id: str | None = Field(default=None, max_length=100)
+    equipamento: str | None = Field(default=None, max_length=200)
+    sintoma_id: int | None = None
+    data_inicio_avaria: str = Field(min_length=8, max_length=20)
+    hora_inicio_avaria: str = Field(min_length=4, max_length=20)
+    notificador_nome: str | None = Field(default=None, max_length=120)
+    notificador_area: str | None = Field(default=None, max_length=120)
+    foto_base64: str | None = None
+
+
+def _erro_interno(msg: str = 'Nao foi possivel processar sua solicitacao.'):
+    return jsonify({'erro': msg}), 500
 
 
 def _get_supabase_client() -> Client:
@@ -24,7 +57,12 @@ def _get_supabase_client() -> Client:
 
 
 @solicitacoes_bp.route("/minhas/<notificador_id>", methods=["GET"])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
 def listar_minhas_solicitacoes(notificador_id):
+    user = get_current_user_context()
+    if user.get('perfil') == 'Solicitante' and user.get('id') != notificador_id:
+        return jsonify({'erro': 'Acesso negado para este recurso.'}), 403
+
     try:
         supabase = _get_supabase_client()
     except RuntimeError:
@@ -41,12 +79,21 @@ def listar_minhas_solicitacoes(notificador_id):
             .execute()
         )
         return jsonify({"solicitacoes": result.data, "total": len(result.data)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except (AuthApiError, PostgrestAPIError):
+        current_app.logger.exception('Erro Supabase ao listar solicitacoes do usuario=%s', notificador_id)
+        return _erro_interno('Nao foi possivel consultar suas solicitacoes.')
+    except Exception:
+        current_app.logger.exception('Erro interno ao listar solicitacoes do usuario=%s', notificador_id)
+        return _erro_interno()
 
 
 @solicitacoes_bp.route("/minhassafs/<usuario_id>", methods=["GET"])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
 def listar_minhas_safs(usuario_id):
+    user = get_current_user_context()
+    if user.get('perfil') == 'Solicitante' and user.get('id') != usuario_id:
+        return jsonify({'erro': 'Acesso negado para este recurso.'}), 403
+
     try:
         supabase = _get_supabase_client()
     except RuntimeError:
@@ -67,11 +114,16 @@ def listar_minhas_safs(usuario_id):
 
         return jsonify({"solicitacoes": result.data, "total": len(result.data)}), 200
 
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except (AuthApiError, PostgrestAPIError):
+        current_app.logger.exception('Erro Supabase ao listar SAFs do usuario=%s', usuario_id)
+        return _erro_interno('Nao foi possivel consultar suas SAFs.')
+    except Exception:
+        current_app.logger.exception('Erro interno ao listar SAFs do usuario=%s', usuario_id)
+        return _erro_interno()
 
 
 @solicitacoes_bp.route("/sic/notificacoes", methods=["GET"])
+@require_auth(("SIC", "CCM", "Administrador"))
 def listar_notificacoes_sic():
     try:
         supabase = _get_supabase_client()
@@ -91,13 +143,28 @@ def listar_notificacoes_sic():
         )
 
         return jsonify({"solicitacoes": result.data, "total": len(result.data)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except (AuthApiError, PostgrestAPIError):
+        current_app.logger.exception('Erro Supabase ao listar notificacoes SIC')
+        return _erro_interno('Nao foi possivel consultar as notificacoes.')
+    except Exception:
+        current_app.logger.exception('Erro interno ao listar notificacoes SIC')
+        return _erro_interno()
 
 
 @solicitacoes_bp.route("/criar", methods=["POST"])
+@require_auth(("Solicitante", "CCM", "Administrador"))
 def criar_saf():
-    dados = request.get_json(silent=True) or {}
+    raw_data = request.get_json(silent=True) or {}
+    try:
+        payload = CriarSafPayload.model_validate(raw_data)
+    except ValidationError as exc:
+        return jsonify({'erro': 'Dados invalidos para criacao da SAF.', 'detalhes': exc.errors()}), 400
+
+    dados = payload.model_dump(exclude_none=True)
+    user = get_current_user_context()
+    if user.get('perfil') == 'Solicitante' and payload.notificador_id != user.get('id'):
+        return jsonify({'erro': 'Acesso negado para criar SAF em nome de outro usuario.'}), 403
+
     request_id = str(uuid.uuid4())
 
     # Evita logar base64 completo da foto e reduz risco de poluir o terminal.
@@ -272,7 +339,7 @@ def criar_saf():
                     "[CRIAR_SAF][%s] etapa=upload_foto falhou (nao bloqueante)",
                     request_id,
                 )
-                pass  # Falha no upload não deve bloquear a criação da SAF
+                # Falha no upload não deve bloquear a criação da SAF
 
         # 4. Registra auditoria (best-effort para nao quebrar a criacao da SAF)
         try:
@@ -293,7 +360,6 @@ def criar_saf():
                 "[CRIAR_SAF][%s] etapa=auditoria falhou (nao bloqueante)",
                 request_id,
             )
-            pass
 
         current_app.logger.info("[CRIAR_SAF][%s] concluido com sucesso", request_id)
 
@@ -309,20 +375,9 @@ def criar_saf():
             201,
         )
 
-    except Exception as e:
-        tb = traceback.format_exc()
-        current_app.logger.error(
-            "[CRIAR_SAF][%s] erro interno: %s\n%s",
-            request_id,
-            str(e),
-            tb,
-        )
-        dev_mode = os.getenv("DEV_MODE", "").lower() in ("1", "true", "yes")
-        erro_payload = {
-            "erro": "Erro ao criar SAF. Tente novamente.",
-            "request_id": request_id,
-            "erro_interno": str(e),
-        }
-        if dev_mode:
-            erro_payload["traceback"] = tb
-        return jsonify(erro_payload), 500
+    except (AuthApiError, PostgrestAPIError):
+        current_app.logger.exception('[CRIAR_SAF][%s] erro de dados/autenticacao Supabase', request_id)
+        return jsonify({'erro': 'Nao foi possivel salvar seus dados. Tente novamente.', 'request_id': request_id}), 500
+    except Exception:
+        current_app.logger.exception('[CRIAR_SAF][%s] erro interno', request_id)
+        return jsonify({'erro': 'Erro ao criar SAF. Tente novamente.', 'request_id': request_id}), 500

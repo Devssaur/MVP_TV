@@ -1,17 +1,19 @@
 import os
 import logging
-from flask import Flask, jsonify, render_template
+from flask import Flask, render_template
 from dotenv import load_dotenv
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
 
 # Carrega as variaveis antes de importar modulos que dependem delas.
 # override=True evita que variaveis antigas do shell mascararem valores do .env.
-load_dotenv(override=True)
+load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 from routes.auth import auth_bp
 from routes.solicitacoes import solicitacoes_bp
 from routes.dados_mestres import dados_bp
 from routes.ccm import ccm_bp
-from routes.sap import sap_bp
 from routes.admin import admin_bp
 
 app = Flask(__name__)
@@ -28,7 +30,6 @@ app.register_blueprint(auth_bp,          url_prefix='/api/auth')
 app.register_blueprint(solicitacoes_bp,  url_prefix='/api/solicitacoes')
 app.register_blueprint(dados_bp,         url_prefix='/api/dados')
 app.register_blueprint(ccm_bp,           url_prefix='/api/ccm')
-app.register_blueprint(sap_bp,           url_prefix='/api/sap')
 app.register_blueprint(admin_bp,         url_prefix='/api/admin')
 
 # ── Rotas de Front-end (SPA com Jinja2) ───────────────────

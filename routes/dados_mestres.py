@@ -1,11 +1,14 @@
 import os
+import logging
 from flask import Blueprint, jsonify, request
 from dotenv import load_dotenv
 from supabase import Client, create_client
+from routes.security import require_auth
 
 load_dotenv()
 
 dados_bp = Blueprint("dados_bp", __name__)
+logger = logging.getLogger(__name__)
 
 
 def _get_supabase_client() -> Client:
@@ -26,6 +29,7 @@ def _dist_sq(lat1, lng1, lat2, lng2):
 
 
 @dados_bp.route("/locais", methods=["GET"])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
 def listar_locais():
     """Lista locais de instalação ativos.
     Retorna 'id' = id_sap para compatibilidade com o seletor manual do formulário.
@@ -98,11 +102,13 @@ def listar_locais():
             for r in result.data
         ]
         return jsonify({"locais": locais, "total": len(locais)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except Exception:
+        logger.exception('Erro ao listar locais')
+        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route("/equipamentos/<local_id_sap>", methods=["GET"])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
 def listar_equipamentos_por_local(local_id_sap):
     """Equipamentos ativos de um local. 'id' = id_sap."""
     try:
@@ -177,11 +183,13 @@ def listar_equipamentos_por_local(local_id_sap):
             for r in result.data
         ]
         return jsonify({"equipamentos": equips, "total": len(equips)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except Exception:
+        logger.exception('Erro ao listar equipamentos por local=%s', local_id_sap)
+        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route("/sintomas/<equipamento_id_sap>", methods=["GET"])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
 def listar_sintomas_por_equipamento(equipamento_id_sap):
     """Retorna sintomas válidos para o tipo de equipamento (arborização SAP).
 
@@ -227,11 +235,13 @@ def listar_sintomas_por_equipamento(equipamento_id_sap):
             "total":           len(sintomas),
             "grupo_filtrado":  grupo,
         }), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except Exception:
+        logger.exception('Erro ao listar sintomas por equipamento=%s', equipamento_id_sap)
+        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route("/estacoes", methods=["GET"])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
 def listar_estacoes():
     """Lista estacoes da tabela estacoes.
 
@@ -265,11 +275,13 @@ def listar_estacoes():
         ]
 
         return jsonify({"estacoes": estacoes, "total": len(estacoes)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except Exception:
+        logger.exception('Erro ao listar estacoes')
+        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route("/sugerir", methods=["GET"])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
 def sugerir():
     """Busca inteligente por equipamentos/sintomas a partir de texto livre.
 
@@ -292,7 +304,8 @@ def sugerir():
     try:
         supabase = _get_supabase_client()
     except RuntimeError:
-        return jsonify({"erro": "Configuracao do Supabase ausente"}), 500
+        logger.exception('Configuracao Supabase ausente em sugerir')
+        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
 
     try:
         pattern = f"%{q}%"
@@ -487,5 +500,6 @@ def sugerir():
 
         return jsonify({"sugestoes": sugestoes[:8]}), 200
 
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except Exception:
+        logger.exception('Erro ao gerar sugestoes')
+        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
