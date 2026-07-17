@@ -178,10 +178,30 @@ def alterar_perfil(usuario_id):
         antes_sel = _selecionar_usuario_por_id(supabase, usuario_id)
         antes = antes_sel.data if antes_sel else None
 
-        supabase.table("usuarios") \
-            .update({"usando_como": perfil}) \
-            .eq("id", usuario_id) \
-            .execute()
+        # MAP to usando_como uppercase value for DB constraint compatibility
+        map_usando_como = {
+            "Solicitante": "SOLICITANTE",
+            "CCM": "CCM",
+            "Administrador": "ADMIN",
+            "SIC": "SIC"
+        }
+        usando_como_val = map_usando_como.get(perfil)
+
+        if usuario_id == ator_id:
+            # Trocar o modo de uso do próprio admin (sidebar switcher)
+            supabase.table("usuarios") \
+                .update({"usando_como": usando_como_val}) \
+                .eq("id", usuario_id) \
+                .execute()
+        else:
+            # Alterar o perfil permanente de outro usuário (dropdown na lista de usuários)
+            supabase.table("usuarios") \
+                .update({
+                    "perfil": perfil,
+                    "usando_como": usando_como_val
+                }) \
+                .eq("id", usuario_id) \
+                .execute()
 
         # Busca o usuário atualizado (RLS pode impedir retorno direto do update)
         sel = _selecionar_usuario_por_id(supabase, usuario_id)
@@ -232,12 +252,24 @@ def editar_usuario(usuario_id):
         if not antes_sel.data:
             return jsonify({"erro": "Usuário não encontrado."}), 404
 
+        if usuario_id == ator_id and perfil != antes_sel.data.get("perfil"):
+            return jsonify({"erro": "Você não pode alterar seu próprio perfil."}), 400
+
+        map_usando_como = {
+            "Solicitante": "SOLICITANTE",
+            "CCM": "CCM",
+            "Administrador": "ADMIN",
+            "SIC": "SIC"
+        }
+        usando_como_val = map_usando_como.get(perfil)
+
         update_data = {
             "nome": nome,
             "email": email,
             "empresa": empresa,
             "area": area,
             "perfil": perfil,
+            "usando_como": usando_como_val
         }
 
         supabase.table("usuarios").update(update_data).eq("id", usuario_id).execute()

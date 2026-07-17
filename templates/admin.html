@@ -207,8 +207,9 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   function perfilSelect(usuario) {
+    const isSelf = usuario.id === _adminId();
     return `
-      <select class="form-control admin-perfil-select"
+      <select class="form-control admin-perfil-select" ${isSelf ? 'disabled title="Você não pode alterar seu próprio perfil"' : ''}
               onchange="mudarPerfilConfirm('${usuario.id}', this.value, this)">
         <option value="Solicitante" ${usuario.perfil==='Solicitante'?'selected':''}>Solicitante</option>
         <option value="CCM" ${usuario.perfil==='CCM'?'selected':''}>CCM</option>
@@ -439,12 +440,22 @@ function abrirEdicaoUsuario(id) {
     return;
   }
 
+  const isSelf = usuario.id === _adminId();
   document.getElementById('edit-user-id').value = usuario.id;
   document.getElementById('edit-nome').value = usuario.nome || '';
   document.getElementById('edit-email').value = usuario.email || '';
   document.getElementById('edit-empresa').value = usuario.empresa || '';
   document.getElementById('edit-area').value = usuario.area || '';
-  document.getElementById('edit-perfil').value = usuario.perfil || 'Solicitante';
+  
+  const editPerfil = document.getElementById('edit-perfil');
+  editPerfil.value = usuario.perfil || 'Solicitante';
+  editPerfil.disabled = isSelf;
+  if (isSelf) {
+    editPerfil.setAttribute('title', 'Você não pode alterar seu próprio perfil');
+  } else {
+    editPerfil.removeAttribute('title');
+  }
+  
   Modal.open('modal-editar-usuario');
 }
 
