@@ -24,19 +24,29 @@ const Auth = (() => {
 
   function requireAuth(allowedProfiles) {
     const user = getUser();
-    if (!user) { window.location.href = '/login'; return null; }
-    if (allowedProfiles && !allowedProfiles.includes(user.perfil)) {
+    if (!user || !user.access_token) {
+      clearUser();
+      window.location.href = '/login';
+      return null;
+    }
+    const currentMode = (user.usando_como || user.perfil || '').toUpperCase();
+    const normalizedPerfil = (user.perfil || '').toUpperCase();
+    if (allowedProfiles && !allowedProfiles.includes(normalizedPerfil)) {
       window.location.href = '/acesso-negado';
       return null;
     }
-    return user;
+    return { ...user, usando_como: currentMode, perfil: normalizedPerfil };
   }
 
   function redirectIfLoggedIn() {
     const user = getUser();
-    if (!user) return;
+    if (!user || !user.access_token) {
+      clearUser();
+      return;
+    }
+    const mode = (user.usando_como || user.perfil || '').toUpperCase();
     const dest = { SOLICITANTE: '/novasaf', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
-    window.location.href = dest[user.perfil] || '/novasaf';
+    window.location.href = dest[mode] || '/novasaf';
   }
 
   return { getUser, setUser, clearUser, requireAuth, redirectIfLoggedIn };
@@ -49,10 +59,14 @@ const API = (() => {
   const BASE = '/api';
 
   async function request(method, path, body) {
+    const currentUser = Auth.getUser();
     const opts = {
       method,
       headers: { 'Content-Type': 'application/json' }
     };
+    if (currentUser?.access_token) {
+      opts.headers.Authorization = `Bearer ${currentUser.access_token}`;
+    }
     if (body !== undefined) opts.body = JSON.stringify(body);
     try {
       const res = await fetch(BASE + path, opts);
@@ -84,9 +98,6 @@ const API = (() => {
     filaCCM:        ()          => request('GET', '/ccm/pendentes'),
     avaliarSaf:     (id, body)  => request('PUT', `/ccm/avaliar/${id}`, body),
     duplicarLote:   (ids, avaliador_id) => request('PUT', '/ccm/duplicar-lote', { ids, avaliador_id }),
-
-    // SAP
-    sincronizarSap: (id)        => request('POST', `/sap/sincronizar/${id}`),
 
     // Dados mestres
     sugerir:      (q, lat, lng, categoria) => {
@@ -270,11 +281,12 @@ function setupToolbar() {
   const perfil = document.getElementById('toolbar-perfil');
   if (perfil) {
     const labels = { SOLICITANTE: 'Solicitante', CCM: 'CCM', ADMIN: 'Administrador', SIC: 'SIC' };
-    perfil.textContent = labels[user.perfil] || user.perfil;
+    const mode = (user.usando_como || user.perfil || '').toUpperCase();
+    perfil.textContent = labels[mode] || user.perfil;
   }
 
   // SOLICITANTE: "Minhas SAFs" tab is in the sidebar, not the nav bar
-  if (user.perfil === 'SOLICITANTE') {
+  if ((user.usando_como || user.perfil || '').toUpperCase() === 'SOLICITANTE') {
     document.querySelectorAll('.nav-tab[href="/minhassafs"]').forEach(el => el.remove());
   }
 
@@ -320,7 +332,7 @@ function _setupSidebar(user) {
     ],
   };
 
-  const items = LINKS[user.perfil] || [];
+  const items = LINKS[(user.usando_como || user.perfil || '').toUpperCase()] || [];
   nav.innerHTML = items.map(({ href, label, icon }) => {
     const active = path === href ? ' active' : '';
     return `<a href="${href}" class="sidebar-link${active}">\
@@ -337,9 +349,18 @@ function _setupSidebar(user) {
     });
   }
 
-  // Dev profile switcher (only rendered when DEV_MODE=true on server)
+  // Admin-only profile switcher for the current experience mode
   const devSelect = document.getElementById('dev-perfil-select');
   if (devSelect) {
+    const isAdmin = (user.perfil || '').toUpperCase() === 'ADMIN';
+    devSelect.disabled = !isAdmin;
+    devSelect.style.opacity = isAdmin ? '1' : '0.6';
+    devSelect.title = isAdmin ? 'Trocar o modo atual de uso' : 'Apenas administradores podem trocar o modo atual de uso';
+    if (!isAdmin) {
+      devSelect.value = '';
+      return;
+    }
+
     const DB_PERFIL = { SOLICITANTE: 'Solicitante', CCM: 'CCM', ADMIN: 'Administrador', SIC: 'SIC' };
     const DEST      = { SOLICITANTE: '/novasaf', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
     devSelect.addEventListener('change', async function () {
@@ -347,11 +368,11 @@ function _setupSidebar(user) {
       if (!appPerfil) return;
       const res = await API.alterarPerfil(user.id, DB_PERFIL[appPerfil]);
       if (!res.ok) {
-        Toast.error(res.data?.erro || 'Erro ao trocar perfil.');
+        Toast.error(res.data?.erro || 'Erro ao trocar o modo atual de uso.');
         this.value = '';
         return;
       }
-      Auth.setUser({ ...user, perfil: appPerfil });
+      Auth.setUser({ ...user, usando_como: appPerfil, perfil: user.perfil });
       window.location.href = DEST[appPerfil] || '/';
     });
   }

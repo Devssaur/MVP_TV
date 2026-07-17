@@ -2,10 +2,56 @@ import os
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 from supabase import Client, create_client
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(dotenv_path=ENV_PATH, override=True)
+
+try:
+    from gotrue.errors import AuthApiError
+except Exception:  # pragma: no cover
+    AuthApiError = Exception
+
+try:
+    from postgrest.exceptions import APIError as PostgrestAPIError
+except Exception:  # pragma: no cover
+    PostgrestAPIError = Exception
 
 load_dotenv()
 
 auth_bp = Blueprint("auth_bp", __name__)
+
+
+class CadastroPayload(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+
+    nome: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    empresa: str = Field(min_length=2, max_length=120)
+    area: str = Field(min_length=2, max_length=120)
+    senha: str = Field(min_length=8, max_length=72)
+
+
+class LoginPayload(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+
+    email: EmailStr
+    senha: str = Field(min_length=1, max_length=72)
+
+
+class PasswordResetRequestPayload(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+
+    email: EmailStr
+
+
+class PasswordResetConfirmPayload(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+
+    token: str = Field(min_length=6, max_length=2048)
+    type: str = Field(default='recovery')
+    nova_senha: str = Field(min_length=8, max_length=72)
 
 
 def _to_app_profile(db_perfil: str) -> str:
@@ -31,42 +77,56 @@ def _to_db_profile(app_perfil: str) -> str:
 
 
 def _get_supabase_client() -> Client:
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
+    supabase_url = (os.getenv("SUPABASE_URL") or "").strip()
+    supabase_key = (os.getenv("SUPABASE_KEY") or "").strip()
+
     if not supabase_url or not supabase_key:
-        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_KEY nao configuradas.")
+        raise RuntimeError("Configure SUPABASE_URL e SUPABASE_KEY no arquivo .env do projeto.")
+
+    if "SEU_PROJECT_ID" in supabase_url or "SEU" in supabase_url.upper() or "SEU" in supabase_key.upper():
+        raise RuntimeError("Substitua os valores de exemplo do arquivo .env pelos dados reais do Supabase.")
+
     return create_client(supabase_url, supabase_key)
 
 
 @auth_bp.route("/debug-usuarios", methods=["GET"])
 def debug_usuarios():
     """Rota temporaria para diagnostico. REMOVER antes de ir para producao."""
+    if os.getenv('DEV_MODE', '').lower() not in ('1', 'true', 'yes'):
+        return jsonify({'erro': 'Rota indisponivel.'}), 404
+
     try:
         supabase = _get_supabase_client()
         result = supabase.table("usuarios").select(
             "id, nome, email, perfil, aprovado, empresa, area"
         ).execute()
         return jsonify({"usuarios": result.data, "total": len(result.data)}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao consultar usuarios.'}), 401
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel consultar os dados.'}), 500
+    except Exception:
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
 
 
 @auth_bp.route("/cadastro", methods=["POST"])
 def cadastro():
-    payload  = request.get_json(silent=True) or {}
-    nome     = (payload.get("nome")    or "").strip()
-    email    = (payload.get("email")   or "").strip().lower()
-    empresa  = (payload.get("empresa") or "").strip()
-    area     = (payload.get("area")    or "").strip()
-    senha    = payload.get("senha")    or ""
+    body = request.get_json(silent=True) or {}
+    try:
+        payload = CadastroPayload.model_validate(body)
+    except ValidationError as exc:
+        return jsonify({'erro': 'Dados invalidos para cadastro.', 'detalhes': exc.errors()}), 400
 
-    if not nome or not email or not empresa or not area or not senha:
-        return jsonify({"erro": "Preencha todos os campos obrigatórios."}), 400
+    nome = payload.nome.strip()
+    email = str(payload.email).strip().lower()
+    empresa = payload.empresa.strip()
+    area = payload.area.strip()
+    senha = payload.senha
 
     try:
         supabase = _get_supabase_client()
     except RuntimeError:
-        return jsonify({"erro": "Configuração do Supabase ausente."}), 500
+        return jsonify({"erro": "Configuracao do Supabase ausente."}), 500
 
     try:
         resp = supabase.auth.sign_up({
@@ -81,40 +141,45 @@ def cadastro():
                 }
             }
         })
-    except Exception as e:
+    except AuthApiError as e:
         msg = str(e)
         msg_lower = msg.lower()
         if "already registered" in msg_lower or "already exists" in msg_lower or "user already registered" in msg_lower:
-            return jsonify({"erro": "Este e-mail já está cadastrado."}), 409
-        # Retorna o detalhe real do erro para diagnóstico
-        return jsonify({"erro": "Não foi possível concluir o cadastro.", "detalhe": msg}), 500
+            return jsonify({"erro": "Este e-mail ja esta cadastrado."}), 409
+        return jsonify({'erro': 'Nao foi possivel concluir o cadastro. Tente novamente.'}), 500
+    except Exception:
+        return jsonify({'erro': 'Nao foi possivel concluir o cadastro. Tente novamente.'}), 500
 
     if resp.user is None:
         # sign_up pode retornar user=None quando e-mail já existe mas confirmação está desabilitada
-        return jsonify({"erro": "Este e-mail já está cadastrado ou o cadastro foi bloqueado."}), 409
+        return jsonify({"erro": "Este e-mail ja esta cadastrado ou o cadastro foi bloqueado."}), 409
 
     return jsonify({"mensagem": "Cadastro realizado! Aguarde aprovação do administrador."}), 201
 
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    payload = request.get_json(silent=True) or {}
-    email   = (payload.get("email") or "").strip().lower()
-    senha   = payload.get("senha") or ""
+    body = request.get_json(silent=True) or {}
+    try:
+        payload = LoginPayload.model_validate(body)
+    except ValidationError:
+        return jsonify({'erro': 'Credenciais invalidas.'}), 401
 
-    if not email or not senha:
-        return jsonify({"erro": "Credenciais inválidas."}), 401
+    email = str(payload.email).strip().lower()
+    senha = payload.senha
 
     try:
         supabase = _get_supabase_client()
     except RuntimeError:
-        return jsonify({"erro": "Configuração do Supabase ausente."}), 500
+        return jsonify({"erro": "Configuracao do Supabase ausente."}), 500
 
     # 1. Autenticar via Supabase Auth
     try:
         resp = supabase.auth.sign_in_with_password({"email": email, "password": senha})
+    except AuthApiError:
+        return jsonify({"erro": "Credenciais invalidas."}), 401
     except Exception:
-        return jsonify({"erro": "Credenciais inválidas."}), 401
+        return jsonify({"erro": "Credenciais invalidas."}), 401
 
     if resp.user is None:
         return jsonify({"erro": "Credenciais inválidas."}), 401
@@ -125,25 +190,68 @@ def login():
     try:
         result = (
             supabase.table("usuarios")
-            .select("id, nome, perfil, aprovado, empresa, area")
+            .select("id, nome, perfil, usando_como, aprovado, empresa, area")
             .eq("id", user_id)
             .single()
             .execute()
         )
+    except PostgrestAPIError:
+        return jsonify({'erro': 'Nao foi possivel carregar os dados do usuario.'}), 500
     except Exception:
-        return jsonify({"erro": "Erro ao carregar dados do usuário."}), 500
+        return jsonify({"erro": "Nao foi possivel carregar os dados do usuario."}), 500
 
     usuario = result.data
     if not usuario:
-        return jsonify({"erro": "Usuário não encontrado."}), 404
+        return jsonify({"erro": "Usuario nao encontrado."}), 404
 
     if not usuario.get("aprovado"):
-        return jsonify({"erro": "Acesso pendente. Aguarde a aprovação do administrador."}), 403
+        return jsonify({"erro": "Acesso pendente. Aguarde a aprovacao do administrador."}), 403
 
     return jsonify({
         "id":      usuario["id"],
         "nome":    usuario["nome"],
         "perfil":  _to_app_profile(usuario["perfil"]),
+        "usando_como": _to_app_profile(usuario.get("usando_como") or usuario.get("perfil")),
         "empresa": usuario.get("empresa"),
         "area":    usuario.get("area"),
+        "access_token": getattr(getattr(resp, 'session', None), 'access_token', None),
     }), 200
+
+
+@auth_bp.route('/password-reset/request', methods=['POST'])
+def password_reset_request():
+    body = request.get_json(silent=True) or {}
+    try:
+        payload = PasswordResetRequestPayload.model_validate(body)
+    except ValidationError as exc:
+        return jsonify({'erro': 'Dados invalidos para recuperacao de senha.', 'detalhes': exc.errors()}), 400
+
+    try:
+        supabase = _get_supabase_client()
+        redirect_to = os.getenv('APP_RESET_REDIRECT_URL') or os.getenv('FRONTEND_URL')
+        options = {'redirect_to': redirect_to} if redirect_to else None
+        supabase.auth.reset_password_email(str(payload.email), options=options)
+        return jsonify({'mensagem': 'Se o e-mail existir, enviaremos instrucoes para redefinir a senha.'}), 200
+    except AuthApiError:
+        return jsonify({'mensagem': 'Se o e-mail existir, enviaremos instrucoes para redefinir a senha.'}), 200
+    except Exception:
+        return jsonify({'erro': 'Nao foi possivel processar a solicitacao de recuperacao.'}), 500
+
+
+@auth_bp.route('/password-reset/confirm', methods=['POST'])
+def password_reset_confirm():
+    body = request.get_json(silent=True) or {}
+    try:
+        payload = PasswordResetConfirmPayload.model_validate(body)
+    except ValidationError as exc:
+        return jsonify({'erro': 'Dados invalidos para redefinicao de senha.', 'detalhes': exc.errors()}), 400
+
+    try:
+        supabase = _get_supabase_client()
+        supabase.auth.verify_otp({'token': payload.token, 'type': payload.type})
+        supabase.auth.update_user({'password': payload.nova_senha})
+        return jsonify({'mensagem': 'Senha redefinida com sucesso.'}), 200
+    except AuthApiError:
+        return jsonify({'erro': 'Token invalido ou expirado.'}), 401
+    except Exception:
+        return jsonify({'erro': 'Nao foi possivel redefinir a senha.'}), 500

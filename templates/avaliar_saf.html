@@ -98,7 +98,7 @@
           <div class="action-card confirm" id="card-confirmar">
             <span class="action-icon">✅</span>
             <span class="action-label">Confirmar</span>
-            <small style="font-size:.74rem;color:inherit;opacity:.8;">Dispara criação no SAP</small>
+            <small style="font-size:.74rem;color:inherit;opacity:.8;">Aprova a SAF e permite registrar o QMNUM</small>
           </div>
           <div class="action-card devolver" id="card-devolver">
             <span class="action-icon">↩️</span>
@@ -145,13 +145,18 @@
           <div class="alert alert-success mb-3">
             <span class="alert-icon">🚀</span>
             <span>
-              Ao confirmar, o SAF enviará os dados ao SAP e retornará o <strong>Nº da Nota (QMNUM)</strong>
-              instantaneamente. Esta ação é irreversível.
+              Ao confirmar, a SAF sera aprovada. O numero SAP (QMNUM) pode ser registrado manualmente agora
+              ou depois. Esta acao e irreversivel.
             </span>
+          </div>
+          <div class="form-group mb-3">
+            <label class="form-label" for="input-qmnum">Numero SAP (QMNUM) - opcional</label>
+            <input id="input-qmnum" class="form-control" maxlength="30" placeholder="Ex: 100012345678">
+            <span class="form-hint">Se nao informado, a SAF fica aprovada aguardando registro manual do numero SAP.</span>
           </div>
           <div class="flex gap-2" style="justify-content:flex-end;">
             <button class="btn btn-outline" id="btn-cancelar-confirmar">Voltar</button>
-            <button class="btn btn-success btn-lg" id="btn-aprovar">✅ Confirmar e Enviar ao SAP</button>
+            <button class="btn btn-success btn-lg" id="btn-aprovar">✅ Confirmar Aprovacao</button>
           </div>
         </div>
 
@@ -160,7 +165,7 @@
 
     <!-- Resultado SAP (após aprovação) -->
     <div id="sap-result" class="card success-top hidden">
-      <div class="card-header"><span class="card-title">✅ Integração SAP Concluída</span></div>
+      <div class="card-header"><span class="card-title">✅ Registro SAP Atualizado</span></div>
       <div class="sap-block" style="margin:1.25rem;">
         <div class="detail-field">
           <span class="detail-label">Nº Nota SAP (QMNUM)</span>
@@ -317,38 +322,36 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
   });
 
-  // ── Envio: Aprovar → SAP ──────────────────────────
+  // ── Envio: Aprovar (sem integracao automatica SAP) ──────────────────────────
   document.getElementById('btn-aprovar').addEventListener('click', function () {
+    const qmnum = (document.getElementById('input-qmnum').value || '').trim();
     ConfirmModal.show({
-      title:        'Confirmar e Enviar ao SAP',
-      message:      'Ao confirmar, a SAF ser\xe1 <strong>aprovada e enviada ao SAP</strong>. Uma nota de manuten\xe7\xe3o ser\xe1 gerada automaticamente. Esta a\xe7\xe3o <strong>n\xe3o pode ser desfeita</strong>.',
-      confirmText:  'Sim, Enviar ao SAP',
+      title:        'Confirmar Aprovacao',
+      message:      'Ao confirmar, a SAF sera <strong>aprovada</strong>. O numero SAP pode ser registrado manualmente agora ou depois. Esta acao <strong>nao pode ser desfeita</strong>.',
+      confirmText:  'Sim, Aprovar',
       confirmClass: 'btn-success',
       onConfirm: async () => {
         const btn = document.getElementById('btn-aprovar');
-        setLoading(btn, true, 'Enviando ao SAP...');
+        setLoading(btn, true, 'Salvando aprovacao...');
 
-    // 1. Atualiza status para APROVADA
-    const rAval = await API.avaliarSaf(safId, { status: 'APROVADA', avaliador_id: user.id });
+    // 1. Atualiza status para APROVADA + registro manual de QMNUM (opcional)
+    const rAval = await API.avaliarSaf(safId, { status: 'APROVADA', avaliador_id: user.id, qmnum });
     if (!rAval.ok) {
-      setLoading(btn, false, '\u2705 Confirmar e Enviar ao SAP');
+      setLoading(btn, false, '\u2705 Confirmar Aprovacao');
       Toast.error(rAval.data.erro || 'Erro ao aprovar SAF.');
       return;
     }
+        setLoading(btn, false, '\u2705 Confirmar Aprovacao');
 
-        // 2. Dispara integração SAP (transação atômica)
-        const rSap = await API.sincronizarSap(safId);
-        setLoading(btn, false, '\u2705 Confirmar e Enviar ao SAP');
-
-        if (rSap.ok) {
-          document.getElementById('res-qmnum').textContent = rSap.data.sap_nota || '\u2014';
-          document.getElementById('res-aufnr').textContent = rSap.data.sap_ordem || 'Pendente';
-          document.getElementById('sap-result').classList.remove('hidden');
-          document.getElementById('panel-confirmar').classList.add('hidden');
-          document.getElementById('d-status').innerHTML = Fmt.statusBadge('APROVADA');
-          Toast.success(`Nota SAP ${rSap.data.sap_nota} gerada com sucesso!`);
+        document.getElementById('res-qmnum').textContent = rAval.data.qmnum || 'Pendente';
+        document.getElementById('res-aufnr').textContent = 'Nao integrado';
+        document.getElementById('sap-result').classList.remove('hidden');
+        document.getElementById('panel-confirmar').classList.add('hidden');
+        document.getElementById('d-status').innerHTML = Fmt.statusBadge('APROVADA');
+        if (rAval.data.qmnum) {
+          Toast.success(`Aprovacao registrada com QMNUM ${rAval.data.qmnum}.`);
         } else {
-          Toast.error(rSap.data.erro || 'Falha na integra\xe7\xe3o com o SAP. A SAF foi aprovada mas a nota n\xe3o foi gerada. Tente sincronizar novamente.');
+          Toast.success('Aprovacao registrada. QMNUM pendente de preenchimento manual.');
         }
       }  // end onConfirm
     });  // end ConfirmModal.show

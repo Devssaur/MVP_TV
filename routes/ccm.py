@@ -3,11 +3,38 @@ import os
 import logging
 from supabase import create_client, Client
 from datetime import datetime, timezone
-import sap_client
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from routes.security import require_auth, get_current_user_context
+
+try:
+    from gotrue.errors import AuthApiError
+except Exception:  # pragma: no cover
+    AuthApiError = Exception
+
+try:
+    from postgrest.exceptions import APIError as PostgrestAPIError
+except Exception:  # pragma: no cover
+    PostgrestAPIError = Exception
 
 logger = logging.getLogger(__name__)
 
 ccm_bp = Blueprint('ccm', __name__)
+
+
+class AvaliarSafPayload(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+
+    status: str
+    motivo_devolucao: str | None = None
+    avaliador_id: str | None = None
+    prioridade: str | None = None
+    tipo_nota: str | None = 'YP'
+    qmnum: str | None = Field(default=None, max_length=30)
+    motivo_cancelamento: str | None = None
+
+
+def _erro_interno_padrao():
+    return jsonify({'erro': 'Nao foi possivel processar sua solicitacao. Tente novamente.'}), 500
 
 def _get_supabase_client() -> Client:
     url = os.environ.get("SUPABASE_URL")
@@ -38,6 +65,7 @@ def _normalize_prioridade(valor) -> str:
 # 1. ROTA GET: Listar SAFs para a fila CCM (exceto devolvidas)
 # ==========================================
 @ccm_bp.route('/pendentes', methods=['GET'])
+@require_auth(('CCM', 'Administrador'))
 def listar_pendentes():
     try:
         supabase = _get_supabase_client()
@@ -56,25 +84,40 @@ def listar_pendentes():
             .order('criado_em', desc=False) \
             .execute()
         return jsonify(resposta.data), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except Exception:
+        logger.exception('Erro interno ao listar pendentes CCM')
+        return _erro_interno_padrao()
 
 
 # ==========================================
 # 2. ROTA PUT: Avaliar a SAF (Aceitar = APROVADA / Recusar = DEVOLVIDA)
 # ==========================================
 @ccm_bp.route('/avaliar/<string:solicitacao_id>', methods=['PUT'])
+@require_auth(('CCM', 'Administrador'))
 def avaliar_saf(solicitacao_id):
-    dados = request.json or {}
-    novo_status  = dados.get('status', '')
-    motivo       = (dados.get('motivo_devolucao') or '').strip()
-    avaliador_id = dados.get('avaliador_id')
-    prioridade = _normalize_prioridade(dados.get('prioridade'))
+    dados = request.get_json(silent=True) or {}
+    try:
+        payload = AvaliarSafPayload.model_validate(dados)
+    except ValidationError as exc:
+        return jsonify({'erro': 'Dados invalidos para avaliacao.', 'detalhes': exc.errors()}), 400
 
-    if novo_status not in ('APROVADA', 'DEVOLVIDA'):
-        return jsonify({"erro": "Status inválido. Use APROVADA ou DEVOLVIDA."}), 400
+    if not solicitacao_id.strip():
+        return jsonify({'erro': 'ID da solicitacao invalido.'}), 400
+
+    novo_status = payload.status
+    motivo       = (payload.motivo_devolucao or '').strip()
+    avaliador_id = get_current_user_context().get('id')
+    prioridade = _normalize_prioridade(payload.prioridade)
+    qmnum_manual = (payload.qmnum or '').strip() or None
+
+    if novo_status not in ('APROVADA', 'DEVOLVIDA', 'CANCELADA'):
+        return jsonify({'erro': 'Status invalido. Use APROVADA, DEVOLVIDA ou CANCELADA.'}), 400
     if novo_status == 'DEVOLVIDA' and not motivo:
         return jsonify({"erro": "Informe o motivo da devolução."}), 400
+    if novo_status == 'CANCELADA':
+        motivo_cancelamento = (payload.motivo_cancelamento or '').strip()
+        if not motivo_cancelamento:
+            return jsonify({'erro': 'Informe o motivo do cancelamento.'}), 400
 
     try:
         supabase = _get_supabase_client()
@@ -87,6 +130,8 @@ def avaliar_saf(solicitacao_id):
             update_data["prioridade"] = prioridade
         if novo_status == 'DEVOLVIDA':
             update_data["motivo_devolucao"] = motivo
+        if novo_status == 'CANCELADA':
+            update_data['motivo_cancelamento'] = (payload.motivo_cancelamento or '').strip()
 
         supabase.table('saf_solicitacoes') \
             .update(update_data) \
@@ -97,7 +142,7 @@ def avaliar_saf(solicitacao_id):
         erro_sap = None
 
         if novo_status == 'APROVADA':
-            tipo_nota = dados.get('tipo_nota', 'YP')
+            tipo_nota = payload.tipo_nota or 'YP'
 
             # Salva tipo_nota escolhido pelo CCM
             supabase.table('saf_solicitacoes') \
@@ -106,73 +151,48 @@ def avaliar_saf(solicitacao_id):
                 .execute()
 
             try:
-                saf_res = supabase.table('saf_solicitacoes') \
-                    .select('*') \
-                    .eq('id', solicitacao_id) \
+                saf = (
+                    supabase.table('saf_solicitacoes')
+                    .select('equipamento_id, local_instalacao_id, sintoma_id, ticket_saf, prioridade')
+                    .eq('id', solicitacao_id)
+                    .maybe_single()
                     .execute()
-                saf = saf_res.data[0] if saf_res.data else {}
-                saf['tipo_nota'] = tipo_nota
+                )
+                saf = saf.data or {}
 
-                # Resolve códigos técnicos SAP (id_sap já é o código TPLNR/EQUNR)
-                saf['tplnr'] = saf.get('local_instalacao_id') or saf.get('local_instalacao', '')
-                saf['equnr'] = saf.get('equipamento_id')      or saf.get('equipamento', '')
-
-                if saf.get('sintoma_id'):
-                    sint = supabase.table('sintomas_catalogo') \
-                        .select('grupo, codigo_item') \
-                        .eq('id', saf['sintoma_id']) \
-                        .maybe_single().execute()
-                    if sint.data:
-                        saf['qmgrp'] = sint.data.get('grupo', '')
-                        saf['qmcod'] = sint.data.get('codigo_item', '')
-
-                resultado = sap_client.sap_criar_nota(saf)
-                qmnum = resultado['qmnum']
+                status_integracao = 'PENDENTE'
+                mensagem = 'Aguardando registro manual do numero SAP.'
+                if qmnum_manual:
+                    status_integracao = 'SUCESSO'
+                    mensagem = None
+                    qmnum = qmnum_manual
 
                 supabase.table('saf_integracao_sap').upsert({
-                    "solicitacao_id":     solicitacao_id,
-                    "qmnum":              qmnum,
-                    "tipo_nota":          tipo_nota,
-                    "status_integracao":  "SUCESSO",
-                    "payload_envio": {
-                        "ticket_saf": saf.get('ticket_saf'),
-                        "tipo_nota":  tipo_nota,
-                        "tplnr":      saf.get('tplnr'),
-                        "equnr":      saf.get('equnr'),
-                        "prioridade": saf.get('prioridade'),
+                    'solicitacao_id':      solicitacao_id,
+                    'qmnum':               qmnum_manual,
+                    'tipo_nota':           tipo_nota,
+                    'status_integracao':   status_integracao,
+                    'ultima_tentativa_em': datetime.now(timezone.utc).isoformat(),
+                    'mensagem_erro':       mensagem,
+                    'payload_resposta':    {
+                        'modo': 'manual',
+                        'observacao': 'Integracao automatica SAP desativada no backend.'
                     },
-                    "payload_resposta":    resultado.get('raw', {}),
-                    "ultima_tentativa_em": datetime.now(timezone.utc).isoformat(),
-                    "mensagem_erro":       None,
                 }).execute()
 
                 supabase.table('logs_auditoria').insert({
-                    "evento": "INTEGRACAO_SAP_SUCESSO",
-                    "payload": {"saf_id": solicitacao_id, "qmnum": qmnum},
+                    'evento': 'REGISTRO_QMNUM_MANUAL' if qmnum_manual else 'APROVACAO_SEM_QMNUM',
+                    'payload': {'saf_id': solicitacao_id, 'qmnum': qmnum_manual},
                 }).execute()
 
             except Exception as sap_err:
-                erro_sap = str(sap_err)
-                logger.error("Falha ao criar nota SAP (saf_id=%s): %s", solicitacao_id, sap_err)
-                try:
-                    supabase.table('saf_integracao_sap').upsert({
-                        "solicitacao_id":      solicitacao_id,
-                        "status_integracao":   "ERRO",
-                        "mensagem_erro":       erro_sap,
-                        "ultima_tentativa_em": datetime.now(timezone.utc).isoformat(),
-                    }).execute()
-                    supabase.table('logs_auditoria').insert({
-                        "evento": "INTEGRACAO_SAP_ERRO",
-                        "payload": {"saf_id": solicitacao_id, "erro": erro_sap},
-                    }).execute()
-                except Exception:
-                    pass
+                erro_sap = 'Nao foi possivel registrar os dados de integracao.'
+                logger.error('Falha ao registrar integracao manual (saf_id=%s): %s', solicitacao_id, sap_err)
 
-            resposta = {"mensagem": "SAF aprovada.", "qmnum": qmnum}
+            resposta = {'mensagem': 'SAF aprovada.', 'qmnum': qmnum}
             if erro_sap:
-                resposta["aviso_sap"] = (
-                    f"Aprovação registrada, mas a criação da nota SAP falhou: {erro_sap}. "
-                    f"Tente novamente via POST /api/sap/criar-nota/{solicitacao_id}."
+                resposta['aviso_sap'] = (
+                    'Aprovacao registrada, mas houve falha ao registrar os dados SAP manualmente.'
                 )
 
             # ── Marca duplicatas ──────────────────────────────────────────
@@ -220,21 +240,29 @@ def avaliar_saf(solicitacao_id):
                                 len(duplicatas_ids), local_id, equip_id,
                                 sintoma_id, qmnum, duplicatas_ids,
                             )
-                except Exception as dup_err:
-                    logger.error("Erro ao marcar duplicatas (não bloqueante): %s", dup_err)
+                except Exception:
+                    logger.exception('Erro ao marcar duplicatas (nao bloqueante)')
 
             resposta["duplicatas"] = len(duplicatas_ids)
             return jsonify(resposta), 200
 
         return jsonify({"mensagem": f"SAF atualizada para {novo_status}."}), 200
-    except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+    except AuthApiError:
+        logger.exception('Erro de autenticacao Supabase ao avaliar SAF id=%s', solicitacao_id)
+        return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
+    except PostgrestAPIError:
+        logger.exception('Erro de dados Supabase ao avaliar SAF id=%s', solicitacao_id)
+        return jsonify({'erro': 'Nao foi possivel salvar os dados da avaliacao.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao avaliar SAF id=%s', solicitacao_id)
+        return _erro_interno_padrao()
 
 
 # ==========================================
 # 2.1 ROTA PUT: Atualizar criticidade/prioridade pelo CCM
 # ==========================================
 @ccm_bp.route('/prioridade/<string:solicitacao_id>', methods=['PUT'])
+@require_auth(('CCM', 'Administrador'))
 def atualizar_prioridade_ccm(solicitacao_id):
     dados = request.json or {}
     prioridade = _normalize_prioridade(dados.get('prioridade'))
@@ -248,18 +276,26 @@ def atualizar_prioridade_ccm(solicitacao_id):
             .eq('id', solicitacao_id) \
             .execute()
         return jsonify({'mensagem': 'Prioridade atualizada.', 'prioridade': prioridade}), 200
-    except Exception as e:
-        return jsonify({'erro': str(e)}), 500
+    except AuthApiError:
+        logger.exception('Erro de autenticacao Supabase ao atualizar prioridade id=%s', solicitacao_id)
+        return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
+    except PostgrestAPIError:
+        logger.exception('Erro de dados Supabase ao atualizar prioridade id=%s', solicitacao_id)
+        return jsonify({'erro': 'Nao foi possivel salvar os dados da prioridade.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao atualizar prioridade id=%s', solicitacao_id)
+        return _erro_interno_padrao()
 
 
 # ==========================================
 # 2.2 ROTA PUT: Marcar ordens como DUPLICADA em lote
 # ==========================================
 @ccm_bp.route('/duplicar-lote', methods=['PUT'])
+@require_auth(('CCM', 'Administrador'))
 def duplicar_lote_ccm():
     dados = request.json or {}
     ids = dados.get('ids') or []
-    avaliador_id = dados.get('avaliador_id')
+    avaliador_id = get_current_user_context().get('id')
 
     if not isinstance(ids, list) or not ids:
         return jsonify({'erro': 'Informe uma lista de IDs para duplicar.'}), 400
@@ -311,21 +347,29 @@ def duplicar_lote_ccm():
                 },
             }).execute()
         except Exception:
-            pass
+            logger.exception('Falha ao registrar auditoria do lote de duplicadas')
 
         return jsonify({
             'mensagem': 'Ordens marcadas como duplicadas.',
             'total_marcado': len(abertas_ids),
             'ids_marcados': abertas_ids,
         }), 200
-    except Exception as e:
-        return jsonify({'erro': str(e)}), 500
+    except AuthApiError:
+        logger.exception('Erro de autenticacao Supabase no lote de duplicadas')
+        return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
+    except PostgrestAPIError:
+        logger.exception('Erro de dados Supabase no lote de duplicadas')
+        return jsonify({'erro': 'Nao foi possivel salvar os dados do lote.'}), 500
+    except Exception:
+        logger.exception('Erro interno no lote de duplicadas')
+        return _erro_interno_padrao()
 
 
 # ==========================================
 # 3. ROTA PATCH: Alternar flag atualizado_sap
 # ==========================================
 @ccm_bp.route('/toggle-sap/<string:solicitacao_id>', methods=['PATCH'])
+@require_auth(('CCM', 'Administrador'))
 def toggle_sap(solicitacao_id):
     dados = request.json or {}
     novo_valor = bool(dados.get('atualizado_sap', False))
@@ -336,5 +380,12 @@ def toggle_sap(solicitacao_id):
             .eq('id', solicitacao_id) \
             .execute()
         return jsonify({'atualizado_sap': novo_valor}), 200
-    except Exception as e:
-        return jsonify({'erro': str(e)}), 500
+    except AuthApiError:
+        logger.exception('Erro de autenticacao Supabase ao alternar flag SAP id=%s', solicitacao_id)
+        return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
+    except PostgrestAPIError:
+        logger.exception('Erro de dados Supabase ao alternar flag SAP id=%s', solicitacao_id)
+        return jsonify({'erro': 'Nao foi possivel salvar os dados da atualizacao.'}), 500
+    except Exception:
+        logger.exception('Erro interno ao alternar flag SAP id=%s', solicitacao_id)
+        return _erro_interno_padrao()

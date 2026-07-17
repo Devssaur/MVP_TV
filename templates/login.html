@@ -400,9 +400,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     Auth.setUser({ id: res.data.id, nome: res.data.nome, perfil: res.data.perfil,
-                   empresa: res.data.empresa, area: res.data.area });
+             usando_como: res.data.usando_como || res.data.perfil,
+             empresa: res.data.empresa, area: res.data.area,
+             access_token: res.data.access_token });
     const dest = { SOLICITANTE: '/minhassafs', CCM: '/filaccm', ADMIN: '/admin' };
-    window.location.href = dest[res.data.perfil] || '/minhassafs';
+    const mode = (res.data.usando_como || res.data.perfil || '').toUpperCase();
+    window.location.href = dest[mode] || '/minhassafs';
   });
 
   ['login-email', 'login-senha'].forEach(function (id) {
