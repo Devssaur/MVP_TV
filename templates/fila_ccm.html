@@ -43,12 +43,12 @@
     </div>
 
     <div class="ccm-filter-item">
-      <label class="equip-filter-label" for="date-from-filter">Data notificacao (de)</label>
+      <label class="equip-filter-label" for="date-from-filter">Data notificação (de)</label>
       <input id="date-from-filter" class="equip-filter-select" type="date">
     </div>
 
     <div class="ccm-filter-item">
-      <label class="equip-filter-label" for="date-to-filter">Data notificacao (ate)</label>
+      <label class="equip-filter-label" for="date-to-filter">Data notificação (ate)</label>
       <input id="date-to-filter" class="equip-filter-select" type="date">
     </div>
 
@@ -861,9 +861,14 @@
 
     // QMNUM badge — aparece após aprovação
     let qmnumBadge = '';
+    let ordemBadge = '';
     if (integ.qmnum && integ.status_integracao === 'SUCESSO') {
       const tipoLabel = integ.tipo_nota || '';
       qmnumBadge = `<span class="badge" style="background:#1e3a5f;color:#fff;font-family:monospace;letter-spacing:.04em;" title="Nota SAP criada com sucesso">${tipoLabel} ${integ.qmnum}</span>`;
+      const ordem = integ.aufnr || integ.numero_ordem_sap;
+      if (ordem) {
+        ordemBadge = `<span class="badge" style="background:#0f766e;color:#fff;font-family:monospace;letter-spacing:.04em;" title="Ordem SAP vinculada">ORDEM ${ordem}</span>`;
+      }
     } else if (integ.status_integracao === 'ERRO') {
       qmnumBadge = `<span class="badge" style="background:#7f1d1d;color:#fff;" title="Erro na integração SAP: ${integ.mensagem_erro || ''}">&#9888; SAP ERRO</span>`;
     } else if (status === 'APROVADA' && !integ.qmnum) {
@@ -912,6 +917,7 @@
           <span class="ccm-ticket">${ticket}</span>
           ${notificadorHtml}
           ${qmnumBadge}
+          ${ordemBadge}
         </div>
         <div class="ccm-card-photo">
           ${saf.anexo_evidencia_url

@@ -57,7 +57,7 @@ def _registrar_log(supabase: Client, evento: str, payload: dict | None, usuario_
 def _selecionar_usuario_por_id(supabase: Client, usuario_id: str):
     return (
         supabase.table("usuarios")
-        .select("id, nome, email, perfil, usando_como, aprovado, empresa, area, created_at")
+        .select("id, nome, email, perfil, aprovado, empresa, area, created_at")
         .eq("id", usuario_id)
         .single()
         .execute()
@@ -93,7 +93,7 @@ def listar_usuarios():
         supabase = _get_supabase_client()
         result = (
             supabase.table("usuarios")
-            .select("id, nome, email, perfil, usando_como, aprovado, empresa, area, created_at")
+            .select("id, nome, email, perfil, aprovado, empresa, area, created_at")
             .order("created_at", desc=True)
             .execute()
         )
@@ -213,8 +213,8 @@ def alterar_perfil(usuario_id):
             "ADMIN_ALTEROU_PERFIL_USUARIO",
             {
                 "alvo_usuario_id": usuario_id,
-                "antes": {"usando_como": (antes or {}).get("usando_como") or (antes or {}).get("perfil")},
-                "depois": {"usando_como": sel.data.get("usando_como") or sel.data.get("perfil")},
+                "antes": {"perfil": (antes or {}).get("perfil")},
+                "depois": {"perfil": sel.data.get("perfil")},
             },
             ator_id,
         )

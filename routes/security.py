@@ -32,12 +32,22 @@ def _get_service_supabase_client() -> Client:
 
 def _read_bearer_token() -> str:
     auth_header = (request.headers.get('Authorization') or '').strip()
-    if not auth_header.lower().startswith('bearer '):
-        raise AuthzError('Token de acesso ausente.')
-    token = auth_header[7:].strip()
-    if not token:
-        raise AuthzError('Token de acesso invalido.')
-    return token
+    if auth_header.lower().startswith('bearer '):
+        token = auth_header[7:].strip()
+        if token:
+            return token
+
+    token = (
+        request.headers.get('X-Access-Token')
+        or request.headers.get('X-Auth-Token')
+        or request.headers.get('token')
+        or request.args.get('token')
+        or request.args.get('access_token')
+    )
+    if token:
+        return str(token).strip()
+
+    raise AuthzError('Token de acesso ausente.')
 
 
 def get_current_user_context() -> dict[str, Any]:
@@ -61,7 +71,7 @@ def get_current_user_context() -> dict[str, Any]:
     try:
         perfil_resp = (
             service_sb.table('usuarios')
-            .select('id, nome, email, perfil, usando_como, aprovado, empresa, area')
+            .select('id, nome, email, perfil, aprovado, empresa, area')
             .eq('id', user_id)
             .maybe_single()
             .execute()
@@ -78,7 +88,7 @@ def get_current_user_context() -> dict[str, Any]:
         'id': user_id,
         'email': getattr(auth_user, 'email', None),
         'perfil': perfil_data.get('perfil'),
-        'usando_como': perfil_data.get('usando_como') or perfil_data.get('perfil'),
+        'usando_como': perfil_data.get('perfil'),
         'nome': perfil_data.get('nome'),
         'empresa': perfil_data.get('empresa'),
         'area': perfil_data.get('area'),

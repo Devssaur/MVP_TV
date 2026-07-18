@@ -150,6 +150,19 @@
             </span>
           </div>
           <div class="form-group mb-3">
+            <label class="form-label" for="input-centro-trabalho">Centro de Trabalho <span class="required">*</span></label>
+            <select id="input-centro-trabalho" class="form-control">
+              <option value="">Carregando centros de trabalho...</option>
+            </select>
+            <span class="form-hint">Campo obrigatório para validação CCM antes da geração da Nota SAP.</span>
+          </div>
+          <div class="form-group mb-3">
+            <label class="form-label" for="input-sintoma">SINTOMA DA FALHA (editável pelo CCM)</label>
+            <select id="input-sintoma" class="form-control">
+              <option value="">Carregando sintomas...</option>
+            </select>
+          </div>
+          <div class="form-group mb-3">
             <label class="form-label" for="input-qmnum">Numero SAP (QMNUM) - opcional</label>
             <input id="input-qmnum" class="form-control" maxlength="30" placeholder="Ex: 100012345678">
             <span class="form-hint">Se nao informado, a SAF fica aprovada aguardando registro manual do numero SAP.</span>
@@ -206,6 +219,47 @@ document.addEventListener('DOMContentLoaded', async function () {
   const ctrl   = saf.saf_controle_ccm?.[0] || saf.controle || {};
   const status = ctrl.status || 'ABERTA';
 
+  async function carregarCentrosTrabalho() {
+    const centroSel = document.getElementById('input-centro-trabalho');
+    const rc = await API.centrosTrabalho();
+    if (!rc.ok || !rc.data.centros?.length) {
+      centroSel.innerHTML = '<option value="">Nenhum centro disponível</option>';
+      return;
+    }
+
+    centroSel.innerHTML = '<option value="">Selecione o centro de trabalho</option>' +
+      rc.data.centros.map(c =>
+        `<option value="${c.codigo}">${c.codigo}${c.denominacao ? ` - ${c.denominacao}` : ''}</option>`
+      ).join('');
+
+    const centroAtual = saf.centro_trabalho || '';
+    if (centroAtual) centroSel.value = centroAtual;
+  }
+
+  async function carregarSintomasParaCcm() {
+    const sintomaSel = document.getElementById('input-sintoma');
+    const equipamentoId = saf.equipamento_id || saf.equipamento?.id || null;
+    const sintomaAtual = saf.sintoma_id || '';
+
+    if (!equipamentoId) {
+      sintomaSel.innerHTML = '<option value="">Sem equipamento vinculado</option>';
+      return;
+    }
+
+    const rs = await API.sintomas(equipamentoId);
+    if (!rs.ok || !rs.data.sintomas?.length) {
+      sintomaSel.innerHTML = '<option value="">Nenhum sintoma disponível</option>';
+      return;
+    }
+
+    sintomaSel.innerHTML = '<option value="">Selecione o sintoma</option>' +
+      rs.data.sintomas.map(s => {
+        const label = `${s.codigo ? `${s.codigo} - ` : ''}${s.descricao || ''}`.trim();
+        return `<option value="${s.id}">${label}</option>`;
+      }).join('');
+    if (sintomaAtual) sintomaSel.value = String(sintomaAtual);
+  }
+
   // ── Preenche campos ───────────────────────────────
   document.getElementById('page-title').textContent = saf.titulo || saf.titulo_falha || 'SAF';
   document.getElementById('page-sub').innerHTML = Fmt.ticket(saf.ticket_saf) + ' &mdash; Aberta em ' + Fmt.date(saf.criado_em);
@@ -237,6 +291,8 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   document.getElementById('content-area').classList.remove('hidden');
+  await carregarCentrosTrabalho();
+  await carregarSintomasParaCcm();
 
   // ── Estado da decisão ─────────────────────────────
   let decisaoAtual = null; // 'APROVADA' | 'DEVOLVIDA' | 'CANCELADA'
@@ -325,6 +381,13 @@ document.addEventListener('DOMContentLoaded', async function () {
   // ── Envio: Aprovar (sem integracao automatica SAP) ──────────────────────────
   document.getElementById('btn-aprovar').addEventListener('click', function () {
     const qmnum = (document.getElementById('input-qmnum').value || '').trim();
+    const centroTrabalho = (document.getElementById('input-centro-trabalho').value || '').trim();
+    const sintomaId = (document.getElementById('input-sintoma').value || '').trim();
+    if (!centroTrabalho) {
+      Toast.warning('Informe o Centro de Trabalho antes de aprovar.');
+      document.getElementById('input-centro-trabalho').focus();
+      return;
+    }
     ConfirmModal.show({
       title:        'Confirmar Aprovacao',
       message:      'Ao confirmar, a SAF sera <strong>aprovada</strong>. O numero SAP pode ser registrado manualmente agora ou depois. Esta acao <strong>nao pode ser desfeita</strong>.',
@@ -335,7 +398,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         setLoading(btn, true, 'Salvando aprovacao...');
 
     // 1. Atualiza status para APROVADA + registro manual de QMNUM (opcional)
-    const rAval = await API.avaliarSaf(safId, { status: 'APROVADA', avaliador_id: user.id, qmnum });
+    const rAval = await API.avaliarSaf(safId, {
+      status: 'APROVADA',
+      avaliador_id: user.id,
+      qmnum,
+      centro_trabalho: centroTrabalho,
+      sintoma_id: sintomaId || undefined,
+    });
     if (!rAval.ok) {
       setLoading(btn, false, '\u2705 Confirmar Aprovacao');
       Toast.error(rAval.data.erro || 'Erro ao aprovar SAF.');

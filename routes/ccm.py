@@ -31,6 +31,8 @@ class AvaliarSafPayload(BaseModel):
     tipo_nota: str | None = 'YP'
     qmnum: str | None = Field(default=None, max_length=30)
     motivo_cancelamento: str | None = None
+    centro_trabalho: str | None = Field(default=None, max_length=120)
+    sintoma_id: str | None = Field(default=None, max_length=100)
 
 
 def _erro_interno_padrao():
@@ -78,7 +80,7 @@ def listar_pendentes():
                 'anexo_evidencia_url, criado_em, '
                 'status, motivo_devolucao, motivo_cancelamento, '
                 'atualizado_sap, tipo_nota, qmnum_duplicata, data_avaliacao, '
-                'saf_integracao_sap(qmnum, tipo_nota, status_integracao, mensagem_erro)'
+                'saf_integracao_sap(qmnum, aufnr, numero_ordem_sap, tipo_nota, status_integracao, mensagem_erro)'
             ) \
             .neq('status', 'DEVOLVIDA') \
             .order('criado_em', desc=False) \
@@ -109,6 +111,7 @@ def avaliar_saf(solicitacao_id):
     avaliador_id = get_current_user_context().get('id')
     prioridade = _normalize_prioridade(payload.prioridade)
     qmnum_manual = (payload.qmnum or '').strip() or None
+    centro_trabalho = (payload.centro_trabalho or '').strip()
 
     if novo_status not in ('APROVADA', 'DEVOLVIDA', 'CANCELADA'):
         return jsonify({'erro': 'Status invalido. Use APROVADA, DEVOLVIDA ou CANCELADA.'}), 400
@@ -118,6 +121,8 @@ def avaliar_saf(solicitacao_id):
         motivo_cancelamento = (payload.motivo_cancelamento or '').strip()
         if not motivo_cancelamento:
             return jsonify({'erro': 'Informe o motivo do cancelamento.'}), 400
+    if novo_status == 'APROVADA' and not centro_trabalho:
+        return jsonify({'erro': 'Informe o Centro de Trabalho para aprovar a SAF.'}), 400
 
     try:
         supabase = _get_supabase_client()
@@ -132,6 +137,23 @@ def avaliar_saf(solicitacao_id):
             update_data["motivo_devolucao"] = motivo
         if novo_status == 'CANCELADA':
             update_data['motivo_cancelamento'] = (payload.motivo_cancelamento or '').strip()
+        if payload.sintoma_id is not None:
+            update_data['sintoma_id'] = (payload.sintoma_id or '').strip() or None
+
+        centro_info = None
+        if novo_status == 'APROVADA':
+            centro_q = (
+                supabase.table('centros_trabalho')
+                .select('codigo, denominacao, ativo')
+                .eq('codigo', centro_trabalho)
+                .limit(1)
+                .execute()
+            )
+            if not centro_q.data:
+                return jsonify({'erro': 'Centro de Trabalho invalido.'}), 400
+            centro_info = centro_q.data[0]
+            if centro_info.get('ativo') is False:
+                return jsonify({'erro': 'Centro de Trabalho inativo.'}), 400
 
         supabase.table('saf_solicitacoes') \
             .update(update_data) \
@@ -176,7 +198,10 @@ def avaliar_saf(solicitacao_id):
                     'mensagem_erro':       mensagem,
                     'payload_resposta':    {
                         'modo': 'manual',
-                        'observacao': 'Integracao automatica SAP desativada no backend.'
+                        'observacao': 'Integracao automatica SAP desativada no backend.',
+                        'centro_trabalho': centro_trabalho,
+                        'centro_trabalho_denominacao': (centro_info or {}).get('denominacao'),
+                        'sintoma_id': (payload.sintoma_id or '').strip() or None,
                     },
                 }).execute()
 
@@ -189,7 +214,12 @@ def avaliar_saf(solicitacao_id):
                 erro_sap = 'Nao foi possivel registrar os dados de integracao.'
                 logger.error('Falha ao registrar integracao manual (saf_id=%s): %s', solicitacao_id, sap_err)
 
-            resposta = {'mensagem': 'SAF aprovada.', 'qmnum': qmnum}
+            resposta = {
+                'mensagem': 'SAF aprovada.',
+                'qmnum': qmnum,
+                'centro_trabalho': centro_trabalho,
+                'centro_trabalho_denominacao': (centro_info or {}).get('denominacao'),
+            }
             if erro_sap:
                 resposta['aviso_sap'] = (
                     'Aprovacao registrada, mas houve falha ao registrar os dados SAP manualmente.'

@@ -9,6 +9,41 @@
 
 {% block content %}
 <div class="page-wrapper">
+  <style>
+    .detail-grid.detail-grid-compact {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: .6rem .9rem;
+      padding: .85rem 1rem;
+      align-items: start;
+    }
+
+    .detail-grid.detail-grid-compact .detail-field {
+      gap: 1px;
+    }
+
+    .detail-grid.detail-grid-compact .detail-value {
+      line-height: 1.3;
+    }
+
+    .detail-grid.detail-grid-compact .detail-field.full {
+      grid-column: 1 / -1;
+    }
+
+    .desc-list {
+      display: grid;
+      gap: .15rem;
+      line-height: 1.2;
+    }
+
+    .desc-row {
+      margin: 0;
+    }
+
+    .desc-key {
+      font-weight: 700;
+      color: var(--text);
+    }
+  </style>
 
   <!-- Breadcrumb / back -->
   <div class="page-header">
@@ -70,7 +105,7 @@
         <span class="card-title">📋 Dados da Solicitação</span>
         <span class="text-muted text-sm" id="criado-em"></span>
       </div>
-      <div class="detail-grid">
+      <div class="detail-grid detail-grid-compact">
         <div class="detail-field">
           <span class="detail-label">Ticket SAF</span>
           <span class="detail-value" id="d-ticket"></span>
@@ -79,33 +114,9 @@
           <span class="detail-label">Prioridade</span>
           <span id="d-prioridade"></span>
         </div>
-        <div class="detail-field">
-          <span class="detail-label">Notificador</span>
-          <span class="detail-value" id="d-notificador">—</span>
-        </div>
-        <div class="detail-field">
-          <span class="detail-label">Data da Avaria</span>
-          <span class="detail-value" id="d-data-avaria">—</span>
-        </div>
-        <div class="detail-field">
-          <span class="detail-label">Hora da Avaria</span>
-          <span class="detail-value" id="d-hora-avaria">—</span>
-        </div>
-        <div class="detail-field">
-          <span class="detail-label">Local de Instalação</span>
-          <span class="detail-value" id="d-local">—</span>
-        </div>
-        <div class="detail-field">
-          <span class="detail-label">Equipamento</span>
-          <span class="detail-value" id="d-equipamento">—</span>
-        </div>
-        <div class="detail-field">
-          <span class="detail-label">Sintoma / Dano</span>
-          <span class="detail-value" id="d-sintoma">—</span>
-        </div>
         <div class="detail-field full">
           <span class="detail-label">Descrição da Falha</span>
-          <span class="detail-value" id="d-descricao" style="white-space:pre-wrap;">—</span>
+          <div class="detail-value" id="d-descricao">—</div>
         </div>
       </div>
     </div>
@@ -226,15 +237,53 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   // ── Campos ────────────────────────────────────────
+  function normalizeLabel(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function escHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatDescricaoCompacta(safData, notificadorNome) {
+    const localInstalacao = safData.local_instalacao?.descricao || safData.local_instalacao || '—';
+    const sintoma = safData.sintoma?.descricao || safData.sintoma || '—';
+    const descricaoRaw = String(safData.descricao_falha || safData.descricao_longa || '').trim();
+    const linhas = descricaoRaw.split(/\r?\n+/).map(s => String(s || '').trim()).filter(Boolean);
+    const itens = [];
+
+    itens.push({ key: 'Local da instalação', value: localInstalacao || '—' });
+    itens.push({ key: 'Sintoma / Dano', value: sintoma || '—' });
+
+    linhas.forEach(linha => {
+      const idx = linha.indexOf(':');
+      if (idx <= 0) return;
+      const chave = linha.slice(0, idx).trim();
+      const valor = linha.slice(idx + 1).trim();
+      const chaveNorm = normalizeLabel(chave);
+      if (!valor) return;
+      if (chaveNorm === 'data/hora da avaria') return;
+      if (chaveNorm === 'local da instalacao') return;
+      itens.push({ key: chave, value: valor });
+    });
+
+    itens.push({ key: 'Notificador', value: notificadorNome || '—' });
+
+    return `<div class="desc-list">${itens.map(item => `<p class="desc-row"><span class="desc-key">${escHtml(item.key)}:</span> ${escHtml(item.value)}</p>`).join('')}</div>`;
+  }
+
   document.getElementById('d-ticket').innerHTML = Fmt.ticket(saf.ticket_saf);
   document.getElementById('d-prioridade').innerHTML = Fmt.prioBadge(saf.prioridade || 'MEDIA');
-  document.getElementById('d-notificador').textContent = saf.notificador?.nome || user.nome;
-  document.getElementById('d-data-avaria').textContent = saf.data_inicio_avaria || '—';
-  document.getElementById('d-hora-avaria').textContent = saf.hora_inicio_avaria || '—';
-  document.getElementById('d-local').textContent      = saf.local_instalacao?.descricao || saf.local_instalacao || '—';
-  document.getElementById('d-equipamento').textContent= saf.equipamento?.descricao || saf.equipamento || '—';
-  document.getElementById('d-sintoma').textContent    = saf.sintoma?.descricao || '—';
-  document.getElementById('d-descricao').textContent  = saf.descricao_falha || saf.descricao_longa || '—';
+  const notificadorNome = saf.notificador?.nome || user.nome;
+  document.getElementById('d-descricao').innerHTML    = formatDescricaoCompacta(saf, notificadorNome);
 
   // ── Foto / GPS ────────────────────────────────────
   const fotoUrl = saf.url_foto || saf.anexo_evidencia_url;

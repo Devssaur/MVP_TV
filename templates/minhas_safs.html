@@ -147,11 +147,15 @@ document.addEventListener('DOMContentLoaded', async function () {
       const integ  = saf.saf_integracao_sap || {};
       const status = getStatus(saf);
       const qmnum  = integ.qmnum;
+      const ordem  = integ.aufnr || integ.numero_ordem_sap;
       const sapId  = qmnum
         ? `<span class="font-mono" style="font-size:.8rem;">${integ.tipo_nota || ''} ${qmnum}</span>`
         : (saf.qmnum_duplicata
           ? `<span class="font-mono" style="font-size:.8rem;color:#6b7280;">${saf.tipo_nota ? saf.tipo_nota + ' ' : ''}${saf.qmnum_duplicata}</span>`
           : '<span class="text-muted">—</span>');
+      const ordemId = ordem
+        ? `<span class="font-mono" style="font-size:.8rem;">${ordem}</span>`
+        : '<span class="text-muted">—</span>';
       const devAlert = status === 'DEVOLVIDA'
         ? `<div style="font-size:.74rem;color:var(--purple);margin-top:2px;">⚠ ${(saf.motivo_devolucao||'').substring(0,50)}${saf.motivo_devolucao?.length > 50 ? '…' : ''}</div>`
         : '';
@@ -159,6 +163,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         <tr class="clickable" onclick="window.location.href='/saf/${saf.id}'">
           <td>${Fmt.ticket(saf.ticket_saf)}</td>
           <td>${sapId}</td>
+          <td>${ordemId}</td>
           <td>${Fmt.statusBadge(status)} ${devAlert}</td>
           <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${saf.titulo || saf.titulo_falha || '—'}</td>
           <td>${Fmt.prioBadge(saf.prioridade || 'MEDIA')}</td>
@@ -171,7 +176,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         <thead>
           <tr>
             <th>Ticket SAF</th>
-            <th>Nº Nota SAP</th>
+            <th>Nota</th>
+            <th>Ordem</th>
             <th>Status</th>
             <th>Descrição</th>
             <th>Prioridade</th>

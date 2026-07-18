@@ -119,7 +119,7 @@ def criar_nota(saf_id):
 
         # 2. Verifica se nota já foi criada com sucesso
         integ_res = sb.table('saf_integracao_sap') \
-            .select('qmnum, status_integracao') \
+            .select('qmnum, status_integracao, payload_resposta') \
             .eq('solicitacao_id', saf_id) \
             .execute()
         if integ_res.data:
@@ -135,9 +135,37 @@ def criar_nota(saf_id):
         saf = saf_res.data[0]
         saf['tipo_nota'] = tipo_nota
 
+        # Reaproveita metadados da validacao CCM (quando disponiveis)
+        integ_payload = (integ_res.data[0].get('payload_resposta') if integ_res.data else None) or {}
+        if isinstance(integ_payload, dict):
+            if integ_payload.get('centro_trabalho'):
+                saf['centro_trabalho'] = integ_payload.get('centro_trabalho')
+
+        # Enriquece dados de sintoma para LongText e campos SAP (QMGRP/QMCOD)
+        sintoma_id = saf.get('sintoma_id')
+        if sintoma_id:
+            sint = (
+                sb.table('sintomas_catalogo')
+                .select('descricao, grupo, codigo_item')
+                .eq('id', sintoma_id)
+                .limit(1)
+                .execute()
+            )
+            if sint.data:
+                sintoma = sint.data[0]
+                saf['sintoma_descricao'] = sintoma.get('descricao')
+                saf['qmgrp'] = sintoma.get('grupo')
+                saf['qmcod'] = sintoma.get('codigo_item')
+
         # 4. Chama API do SAP
         resultado = sap_client.sap_criar_nota(saf)
         qmnum = resultado['qmnum']
+        raw_result = resultado.get('raw', {}) if isinstance(resultado, dict) else {}
+        aufnr = (
+            (resultado.get('aufnr') if isinstance(resultado, dict) else None)
+            or (raw_result.get('aufnr') if isinstance(raw_result, dict) else None)
+            or (raw_result.get('numero_ordem_sap') if isinstance(raw_result, dict) else None)
+        )
 
         payload_envio = {
             "ticket_saf":       saf.get('ticket_saf'),
@@ -151,17 +179,19 @@ def criar_nota(saf_id):
         sb.table('saf_integracao_sap').upsert({
             "solicitacao_id":     saf_id,
             "qmnum":              qmnum,
+            "aufnr":              aufnr,
+            "numero_ordem_sap":   aufnr,
             "tipo_nota":          tipo_nota,
             "status_integracao":  "SUCESSO",
             "payload_envio":      payload_envio,
-            "payload_resposta":   resultado.get('raw', {}),
+            "payload_resposta":   raw_result,
             "ultima_tentativa_em": _agora(),
             "mensagem_erro":      None,
         }).execute()
 
         _log(sb, "INTEGRACAO_SAP_SUCESSO", {"saf_id": saf_id, "qmnum": qmnum})
 
-        return jsonify({"mensagem": "Nota criada com sucesso.", "qmnum": qmnum}), 200
+        return jsonify({"mensagem": "Nota criada com sucesso.", "qmnum": qmnum, "aufnr": aufnr}), 200
 
     except Exception as e:
         # Registra falha sem quebrar o fluxo
@@ -341,7 +371,7 @@ def sync_mestres():
             if not codigo:
                 continue
             sb.table('locais_instalacao').upsert(
-                {"codigo": codigo, "descricao": descricao, "ativo": True, "sincronizado_em": agora},
+                {"id_sap": codigo, "codigo": codigo, "descricao": descricao, "ativo": True, "sincronizado_em": agora},
                 ignore_duplicates=False,
             ).execute()
             locais_sync += 1
@@ -358,17 +388,18 @@ def sync_mestres():
             local_id = None
             if tplnr:
                 local_res = sb.table('locais_instalacao') \
-                    .select('id') \
-                    .eq('codigo', tplnr) \
+                    .select('id_sap') \
+                    .eq('id_sap', tplnr) \
                     .execute()
                 if local_res.data:
-                    local_id = local_res.data[0]['id']
+                    local_id = local_res.data[0]['id_sap']
 
             sb.table('equipamentos').upsert(
                 {
+                    "id_sap": codigo,
                     "codigo": codigo,
                     "descricao": descricao,
-                    "local_instalacao_id": local_id,
+                    "local_id_sap": local_id,
                     "ativo": True,
                     "sincronizado_em": agora,
                 },

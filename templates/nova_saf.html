@@ -4,12 +4,11 @@
 
 {% block toolbar_nav %}
 <a href="/minhassafs" class="nav-tab">Minhas SAFs</a>
-<a href="/novasaf"   class="nav-tab active">Nova SAF</a>
+<a href="/novasaf" class="nav-tab active">Nova SAF</a>
 {% endblock %}
 
 {% block content %}
-<div class="page-wrapper">
-
+<div class="page-wrapper nova-saf-clean">
   <div class="page-header">
     <div>
       <p class="page-title">Reportar uma Falha</p>
@@ -17,509 +16,467 @@
   </div>
 
   <form id="form-novasaf" novalidate>
-
-    <!-- Campos t&eacute;cnicos ocultos — preenchidos automaticamente pela sele&ccedil;&atilde;o -->
-    <input type="hidden" id="local_instalacao_id"   name="local_instalacao_id">
+    <input type="hidden" id="local_instalacao_id" name="local_instalacao_id">
     <input type="hidden" id="local_instalacao_nome" name="local_instalacao_nome">
-    <input type="hidden" id="equipamento_id"        name="equipamento_id">
-    <input type="hidden" id="equipamento_nome"      name="equipamento_nome">
-    <input type="hidden" id="sintoma_id"            name="sintoma_id">
-    <input type="hidden" id="titulo_falha"          name="titulo_falha">
-    <input type="hidden" id="prioridade"            name="prioridade" value="ALTA">
-    <input type="hidden" id="foto_lat"              name="foto_lat">
-    <input type="hidden" id="foto_lng"              name="foto_lng">
-    <input type="hidden" id="foto_acc"              name="foto_acc">
+    <input type="hidden" id="equipamento_id" name="equipamento_id">
+    <input type="hidden" id="equipamento_nome" name="equipamento_nome">
+    <input type="hidden" id="sintoma_id" name="sintoma_id">
+    <input type="hidden" id="sistema_id" name="sistema_id">
+    <input type="hidden" id="subsistema_id" name="subsistema_id">
+    <input type="hidden" id="titulo_falha" name="titulo_falha">
+    <input type="hidden" id="prioridade" name="prioridade" value="ALTA">
+    <input type="hidden" id="data_inicio_avaria" name="data_inicio_avaria">
+    <input type="hidden" id="hora_inicio_avaria" name="hora_inicio_avaria">
+    <input type="hidden" id="via_numero" name="via_numero">
+    <input type="hidden" id="km_inicial" name="km_inicial">
+    <input type="hidden" id="km_final" name="km_final">
+    <input type="hidden" id="foto_lat" name="foto_lat">
+    <input type="hidden" id="foto_lng" name="foto_lng">
+    <input type="hidden" id="foto_acc" name="foto_acc">
 
-    <!-- ① TIPO DE ATENDIMENTO -->
     <div class="form-section">
       <div class="form-section-title">
         <span class="section-num">1</span> Tipo de atendimento
       </div>
 
-      <div class="form-group">
-        <style>
-          .tipo-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: .6rem;
-            margin-top: .4rem;
-          }
-          @media (max-width: 520px) {
-            .tipo-grid { grid-template-columns: repeat(2, 1fr); }
-          }
-          .tipo-btn {
-            border: 1.5px solid var(--border);
-            background: var(--surface);
-            border-radius: var(--radius-lg);
-            padding: .72rem .5rem;
-            font-weight: 700;
-            font-size: .84rem;
-            cursor: pointer;
-            transition: border-color .15s, background .15s, box-shadow .15s;
-          }
-          .tipo-btn:hover {
-            border-color: var(--primary);
-            background: rgba(27,42,94,.04);
-          }
-          .tipo-btn.selected {
-            border-color: var(--primary);
-            background: rgba(27,42,94,.08);
-            box-shadow: 0 0 0 3px rgba(27,42,94,.12);
-          }
-          .step-locked {
-            opacity: .56;
-            pointer-events: none;
-            user-select: none;
-          }
-          .big-dropdown {
-            min-height: 52px;
-            font-size: 1rem;
-            font-weight: 600;
-          }
-        </style>
+      <div class="tipo-tabs" role="tablist" aria-label="Tipo de atendimento">
+        <button type="button" class="tipo-tab selected" data-tipo="ESTACAO" role="tab" aria-selected="true">ESTA&Ccedil;&Atilde;O</button>
+        <button type="button" class="tipo-tab" data-tipo="MRO" role="tab" aria-selected="false">MRO</button>
+        <button type="button" class="tipo-tab" data-tipo="VIA" role="tab" aria-selected="false">VIA</button>
+      </div>
 
-        <div class="tipo-grid">
-          <button type="button" class="tipo-btn" data-tipo="ESTACAO">Esta&ccedil;&atilde;o</button>
-          <button type="button" class="tipo-btn" data-tipo="MRO">MRO</button>
-          <button type="button" class="tipo-btn" data-tipo="VIA">Via</button>
-          <button type="button" class="tipo-btn" data-tipo="OUTROS">Outros</button>
+      <div class="flux-grid flux-grid-top" id="flux-grid-top" style="margin-top:.85rem;display:none;"></div>
+
+      <div id="estacao-sistema-layout" class="estacao-sistema-layout" style="display:block;">
+        <div id="estacao-row-1" class="flux-grid est-row">
+          <div class="form-group" id="fluxo-sistema-wrap">
+            <label class="form-label clean-label" for="fluxo-sistema">Sistema <span class="required">*</span></label>
+            <select id="fluxo-sistema" class="form-control compact-select" required>
+              <option value=""></option>
+            </select>
+          </div>
+          <div class="form-group" id="fluxo-subsistema-wrap">
+            <label class="form-label" for="fluxo-subsistema">Subsistema <span class="required">*</span></label>
+            <select id="fluxo-subsistema" class="form-control compact-select" disabled>
+              <option value=""></option>
+            </select>
+          </div>
         </div>
-
-        <span class="form-hint" style="display:block;margin-top:.35rem;">
-          Selecione <strong>Esta&ccedil;&atilde;o</strong> ou <strong>MRO</strong> para habilitar a pr&oacute;xima etapa.
-        </span>
-      </div>
-    </div>
-
-    <!-- ② QUAL LOCAL DE FALHA? -->
-    <div class="form-section step-locked" id="sec-oque">
-      <div class="form-section-title">
-        <span class="section-num">2</span> Local
-      </div>
-
-      <div class="form-group" id="desc-falha-wrap">
-        <textarea id="descricao_falha" name="descricao_falha"
-                  class="form-control" rows="3"
-                  placeholder=""></textarea>
-        <span class="form-hint" style="display:block;margin-top:.3rem;">
-          Mencione o local e o que observou. Se selecionar o sintoma abaixo, este campo &eacute; opcional.
-        </span>
-        <span class="form-error" id="desc-error" style="display:none;">Descreva o problema ou selecione um sintoma.</span>
-      </div>
-
-      <div class="form-group" id="estacao-dropdown-wrap" style="display:none;">
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label" for="estacao-linha">Linha</label>
-            <select id="estacao-linha" class="form-control big-dropdown">
-              <option value="">Selecione a linha</option>
+        <div id="estacao-row-2" class="flux-grid est-row">
+          <div class="form-group" id="fluxo-falha-wrap">
+            <label class="form-label" for="fluxo-falha">Falha <span class="required">*</span></label>
+            <select id="fluxo-falha" class="form-control compact-select" disabled>
+              <option value=""></option>
+            </select>
+          </div>
+          <div class="form-group" id="fluxo-prioridade-wrap">
+            <label class="form-label clean-label" for="fluxo-prioridade">Prioridade <span class="required">*</span></label>
+            <select id="fluxo-prioridade" class="form-control compact-select" required>
+              <option value=""></option>
+              <option value="CRITICA">1 - BAIXA IMEDIATA DE SERVI&Ccedil;O (TREM PARADO)</option>
+              <option value="ALTA">2 - SUPRESS&Atilde;O CONSEQUENTE (OPERA&Ccedil;&Atilde;O DEGRADADA)</option>
+              <option value="MEDIA">3 - IMPACTO CONTRATUAL (INDICADORES EST e MRO)</option>
+              <option value="BAIXA">4 - ATENDIMENTO PROGRAM&Aacute;VEL (PCM)</option>
+            </select>
+          </div>
+        </div>
+        <div id="estacao-row-falha" class="flux-grid est-row"></div>
+        <div id="estacao-row-3" class="flux-grid est-row">
+          <div class="form-group" id="fluxo-linha-wrap">
+            <label class="form-label clean-label" for="fluxo-linha">Linha <span class="required">*</span></label>
+            <select id="fluxo-linha" class="form-control compact-select" required>
+              <option value=""></option>
               <option value="11">11</option>
               <option value="12">12</option>
               <option value="13">13</option>
+              <option value="36">36</option>
             </select>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="estacao-local">Esta&ccedil;&atilde;o</label>
-            <select id="estacao-local" class="form-control big-dropdown" disabled>
-              <option value="">Selecione a linha primeiro</option>
+          <div class="form-group" id="top-estacao-wrap" style="display:block;">
+            <label class="form-label" for="fluxo-estacao">Esta&ccedil;&atilde;o <span class="required">*</span></label>
+            <select id="fluxo-estacao" class="form-control compact-select" disabled>
+              <option value=""></option>
             </select>
           </div>
         </div>
-        <span class="form-hint" style="display:block;margin-top:.3rem;">
-          Selecione a linha e depois a esta&ccedil;&atilde;o correspondente.
-        </span>
-      </div>
-
-      <!-- Cards de sugest&atilde;o (aparecem ao digitar) -->
-      <div id="suggest-area" style="display:none;margin-top:.875rem;">
-        <p style="font-size:.8rem;font-weight:700;color:var(--primary);margin-bottom:.5rem;">
-           O sistema identificou os seguintes equipamentos  selecione o correto:
-        </p>
-        <p id="suggest-loading" style="display:none;font-size:.82rem;color:var(--text-muted);padding:.4rem 0;">
-           Buscando...
-        </p>
-        <div id="suggest-list" style="display:flex;flex-direction:column;gap:.45rem;"></div>
-        <p id="suggest-empty"   style="display:none;font-size:.82rem;color:var(--text-muted);padding:.4rem 0;">
-          Nenhum resultado. Use Especificar manualmente abaixo.
-        </p>
-      </div>
-
-      <!-- Card do equipamento selecionado -->
-      <div id="selected-card" style="display:none;margin-top:.875rem;">
-        <div style="border:2px solid var(--green);border-radius:var(--radius-lg);
-                    background:rgba(42,110,66,.07);padding:.875rem 1.125rem;
-                    display:flex;align-items:flex-start;gap:.875rem;">
-          <span style="font-size:1.55rem;flex-shrink:0;line-height:1;margin-top:2px;">&#9989;</span>
-          <div style="flex:1;min-width:0;">
-            <div id="sel-equip" style="font-weight:700;color:var(--text);font-size:.95rem;line-height:1.3;"></div>
-            <div id="sel-local" style="font-size:.8rem;color:var(--text-muted);margin-top:3px;"></div>
-            <div id="sel-sintoma" style="display:none;font-size:.82rem;color:var(--primary);
-                                         margin-top:5px;font-weight:600;"></div>
-          </div>
-          <button type="button" id="btn-change-equip"
-                  class="btn btn-ghost btn-sm"
-                  style="flex-shrink:0;font-size:.75rem;color:var(--primary);">Trocar</button>
-        </div>
-      </div>
-
-      <!-- Voltar / Especificar manualmente (accordion) -->
-      <div style="margin-top:.875rem;">
-        <button type="button" id="btn-toggle-manual"
-                class="btn btn-ghost btn-sm"
-                style="font-size:.78rem;color:var(--text-muted);padding:.2rem 0;
-                       display:inline-flex;align-items:center;gap:5px;">
-          <span id="manual-icon"
-                style="display:inline-block;transition:transform .2s;">&#9654;</span>
-          N&atilde;o encontrou? Especifique manualmente
-        </button>
-        <div id="manual-section"
-             style="display:none;margin-top:.75rem;padding:1rem;
-                    background:var(--surface);border:1px solid var(--border);
-                    border-radius:var(--radius-lg);">
-          <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.875rem;">
-            Selecione o local, equipamento e sintoma diretamente:
-          </p>
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label" for="man-local" id="man-local-label">Local de Instalação</label>
-              <div id="man-local-select-wrap">
-                <select id="man-local" class="form-control">
-                  <option value="">Carregando...</option>
-                </select>
-              </div>
-              <div id="man-linha-input-wrap" style="display:none;">
-                <select id="man-linha-select" class="form-control">
-                  <option value="">Selecione a linha</option>
-                  <option value="11">11</option>
-                  <option value="12">12</option>
-                  <option value="13">13</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="man-equip" id="man-equip-label">Equipamento</label>
-              <select id="man-equip" class="form-control" disabled>
-                <option value="">Selecione o local primeiro</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-grid" id="via-extra-fields" style="display:none;">
-            <div class="form-group">
-              <label class="form-label" for="via-km">KM</label>
-              <select id="via-km" class="form-control"></select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="via-poste">Poste</label>
-              <select id="via-poste" class="form-control"></select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="man-sintoma">
-              Sintoma / Dano
-              <span style="font-weight:400;color:var(--text-muted);font-size:.78rem;">(opcional)</span>
-            </label>
-            <select id="man-sintoma" class="form-control" disabled>
-              <option value="">Selecione o equipamento primeiro</option>
+        <div id="estacao-row-4" class="flux-grid est-row">
+          <div class="form-group" id="fluxo-trecho-wrap">
+            <label class="form-label" for="fluxo-trecho">Trecho <span class="required" id="trecho-required">*</span></label>
+            <select id="fluxo-trecho" class="form-control compact-select" disabled>
+              <option value=""></option>
             </select>
+          </div>
+          <div class="form-group" id="fluxo-equipamento-wrap">
+            <label class="form-label" for="equipamento_curto">Equipamento <span class="required" id="equipamento-required" style="display:none;">*</span></label>
+            <input id="equipamento_curto" type="text" class="form-control" maxlength="12" placeholder="Ex: EQ01">
           </div>
         </div>
       </div>
 
-      <span class="form-error" id="equip-error" style="display:none;margin-top:.5rem;">
-        Identifique o equipamento pela busca ou pelo seletor manual.
-      </span>
-    </div>
+      <div class="flux-grid" id="flux-grid-prio-sistema" style="display:none;"></div>
 
-    <!-- ③ DESCRIÇÃO DA FALHA -->
-    <div class="form-section">
-      <div class="form-section-title">
-        <span class="section-num">3</span> Descrição da falha
-      </div>
-
-      <!-- Botões Civil/Elétrica — apenas no fluxo ESTACAO -->
-      <div id="estacao-tipo-falha-wrap" style="display:none;margin-top:.85rem;">
-        <style>
-          .tipo-falha-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: .6rem;
-            margin-bottom: .75rem;
-          }
-          .falha-complemento-grid {
-            display: grid;
-            grid-template-columns: 1fr 140px;
-            gap: .55rem;
-          }
-          .tipo-falha-btn {
-            border: 1.5px solid var(--border);
-            background: var(--surface);
-            border-radius: var(--radius-lg);
-            padding: .75rem .5rem;
-            font-weight: 700;
-            font-size: .9rem;
-            cursor: pointer;
-            transition: border-color .15s, background .15s, box-shadow .15s;
-          }
-          .tipo-falha-btn:hover {
-            border-color: var(--primary);
-            background: rgba(27,42,94,.04);
-          }
-          .tipo-falha-btn.selected {
-            border-color: var(--primary);
-            background: rgba(27,42,94,.08);
-            box-shadow: 0 0 0 3px rgba(27,42,94,.12);
-          }
-        </style>
-        <div class="tipo-falha-grid">
-          <button type="button" class="tipo-falha-btn" id="btn-falha-civil">Civil</button>
-          <button type="button" class="tipo-falha-btn" id="btn-falha-eletrica">El&eacute;trica</button>
-        </div>
-        <div id="falha-civil-wrap" style="display:none;">
-          <div class="falha-complemento-grid">
-            <select id="falha-civil-sel" class="form-control big-dropdown">
-              <option value="">Selecione a falha</option>
-              <option value="Falta de água">Falta de água</option>
-              <option value="Piso quebrado">Piso quebrado</option>
-              <option value="Banheiro">Banheiro</option>
-              <option value="Vazamento">Vazamento</option>
-            </select>
-            <select id="falha-civil-numero" class="form-control big-dropdown">
-              <option value="">NA</option>
-            </select>
-          </div>
-        </div>
-        <div id="falha-eletrica-wrap" style="display:none;">
-          <div class="falha-complemento-grid">
-            <select id="falha-eletrica-sel" class="form-control big-dropdown">
-              <option value="">Selecione a falha</option>
-              <option value="Escada Rolante">Escada Rolante</option>
-              <option value="Bloqueio">Bloqueio</option>
-              <option value="Elevador">Elevador</option>
-              <option value="Iluminação">Iluminação</option>
-            </select>
-            <select id="falha-eletrica-numero" class="form-control big-dropdown">
-              <option value="">NA</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div id="descricao-item3-wrap" style="margin-top:.85rem;">
-        <textarea id="descricao_item3" name="descricao_item3"
-                  class="form-control" rows="3"
-                  placeholder="Descreva a falha"></textarea>
-      </div>
-    </div>
-
-    <style>
-      .ocorrencia-checkbox {
-        width: 16px;
-        height: 16px;
-        accent-color: #fca5a5;
-      }
-    </style>
-
-    <div class="form-section" id="sec-ocorrencia-cliente">
-      <div class="form-group" style="margin-bottom:.85rem;">
-        <label class="form-label" for="ocorrencia_cliente" style="display:flex;align-items:center;gap:.45rem;cursor:pointer;">
-          <input type="checkbox" id="ocorrencia_cliente" name="ocorrencia_cliente" class="ocorrencia-checkbox">
-          Houve ocorrência com cliente?
-        </label>
-      </div>
-
-      <div class="form-group" id="descricao-ocorrencia-wrap" style="display:none;">
-        <textarea id="descricao_ocorrencia" name="descricao_ocorrencia"
-                  class="form-control" rows="3"
-                  placeholder="Descreva a ocorrência"></textarea>
-      </div>
-    </div>
-
-    <!-- ④ QUANDO E QUAL O IMPACTO? -->
-    <div class="form-section">
-      <div class="form-section-title">
-        <span class="section-num">4</span> Quando e qual o impacto?
-      </div>
-
-      <div class="form-grid" style="margin-bottom:1.25rem;">
+      <div class="flux-grid flux-grid-mro" id="mro-trens-grid" style="display:none;">
         <div class="form-group">
-          <label class="form-label" for="data_inicio_avaria">
-            Data de in&iacute;cio&nbsp;<span class="required">*</span>
-          </label>
-          <input type="date" id="data_inicio_avaria" name="data_inicio_avaria"
-                 class="form-control" required>
-          <span class="form-error">Campo obrigatório.</span>
+          <label class="form-label" for="fluxo-serie">S&eacute;rie <span class="required">*</span></label>
+          <select id="fluxo-serie" class="form-control compact-select" disabled>
+            <option value=""></option>
+          </select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="hora_inicio_avaria">
-            Hora de início&nbsp;<span class="required">*</span>
-          </label>
-          <input type="time" id="hora_inicio_avaria" name="hora_inicio_avaria"
-                 class="form-control" required>
-          <span class="form-error">Campo obrigatório.</span>
+          <label class="form-label" for="fluxo-trem">Trem <span class="required">*</span></label>
+          <select id="fluxo-trem" class="form-control compact-select" disabled>
+            <option value=""></option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="fluxo-carro">Carro <span class="required">*</span></label>
+          <select id="fluxo-carro" class="form-control compact-select" disabled>
+            <option value=""></option>
+          </select>
         </div>
       </div>
 
-      <div class="form-group" style="display:none;">
-        <label class="form-label" for="prioridade">Criticidade</label>
-        <input type="text" class="form-control" value="ALTA" disabled>
+      <div class="flux-grid" id="flux-grid-subs-falha" style="display:none;"></div>
+
+      <div class="flux-grid" id="flux-grid-trecho-equip" style="display:none;">
+        <div class="form-group" id="fluxo-equipamento-amv-wrap" style="display:none;">
+          <label class="form-label" for="fluxo-equipamento-amv">Equipamento AMV</label>
+          <select id="fluxo-equipamento-amv" class="form-control compact-select" disabled>
+            <option value=""></option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flux-grid flux-grid-via" id="via-km-grid" style="display:none;">
+        <div class="form-group" id="fluxo-via-wrap">
+          <label class="form-label" for="fluxo-via">Via <span class="required" id="via-required" style="display:none;">*</span></label>
+          <input id="fluxo-via" type="text" class="form-control via-input" inputmode="numeric" maxlength="3" placeholder="Ex: 1">
+        </div>
+        <div class="form-group" id="fluxo-km-inicial-wrap">
+          <label class="form-label" for="fluxo-km-inicial">KM Inicial <span class="required" id="km-inicial-required" style="display:none;">*</span></label>
+          <input id="fluxo-km-inicial" type="text" class="form-control via-input" inputmode="numeric" maxlength="5" placeholder="00/00">
+        </div>
+        <div class="form-group" id="fluxo-km-final-wrap">
+          <label class="form-label" for="fluxo-km-final">KM Final <span class="required" id="km-final-required" style="display:none;">*</span></label>
+          <input id="fluxo-km-final" type="text" class="form-control via-input" inputmode="numeric" maxlength="5" placeholder="00/00">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="descricao_falha">Descri&ccedil;&atilde;o da falha <span class="required">*</span></label>
+        <textarea id="descricao_falha" name="descricao_falha" class="form-control" rows="4" placeholder="Descreva de forma objetiva o que ocorreu"></textarea>
+        <div id="avaria-legenda" class="avaria-legenda"></div>
+        <span class="form-error" id="desc-error" style="display:none;">Descreva o problema com ao menos 3 caracteres.</span>
       </div>
     </div>
 
-    <!-- ④ FOTO DO PROBLEMA (obrigatória) -->
     <div class="form-section">
       <div class="form-section-title">
-        <span class="section-num">5</span> Foto do Problema
+        <span class="section-num">2</span> Foto do Problema
         <span class="required" style="font-size:.75rem;font-weight:700;">*</span>
-        <span style="font-size:.73rem;font-weight:400;color:var(--text-muted);margin-left:4px;">(obrigat&oacute;ria)</span>
       </div>
 
-      <!-- Estado: sem foto -->
       <div id="cam-no-photo">
-        <div style="text-align:center;padding:2rem 1.25rem;border:2px dashed var(--border);
-                    border-radius:var(--radius-lg);background:var(--surface);">
+        <div style="text-align:center;padding:2rem 1.25rem;border:2px dashed var(--border);border-radius:var(--radius-lg);background:var(--surface);">
           <div style="font-size:3rem;margin-bottom:.75rem;opacity:.6;">&#128247;</div>
-          <p style="font-size:.9rem;color:var(--text);font-weight:600;margin-bottom:.3rem;">
-            Foto do equipamento ou local com a falha
-          </p>
-          <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1.25rem;">
-            A foto &eacute; <strong>obrigat&oacute;ria</strong>. A localiza&ccedil;&atilde;o GPS ser&aacute; registrada automaticamente.
-          </p>
-          <button type="button" id="btn-open-camera" class="btn btn-primary btn-lg">
-            &#128247;&nbsp; Abrir C&acirc;mera
-          </button>
-          <p style="font-size:.74rem;color:var(--text-light);margin-top:.75rem;">
-            Um guia aparecer&aacute; para centralizar o equipamento.
-          </p>
+          <p style="font-size:.9rem;color:var(--text);font-weight:600;margin-bottom:.3rem;">Foto do equipamento ou local com a falha</p>
+          <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1.25rem;">A foto &eacute; obrigat&oacute;ria. A localiza&ccedil;&atilde;o GPS ser&aacute; registrada automaticamente.</p>
+          <button type="button" id="btn-open-camera" class="btn btn-primary btn-lg">&#128247;&nbsp; Abrir C&acirc;mera</button>
         </div>
       </div>
 
-      <!-- Estado: foto capturada -->
       <div id="cam-photo-result" class="hidden">
-        <div style="position:relative;border:1px solid var(--border);
-                    border-radius:var(--radius-lg);overflow:hidden;max-height:300px;background:#000;">
-          <img id="cam-photo-preview" src="" alt="Foto capturada"
-               style="width:100%;max-height:300px;object-fit:contain;display:block;">
-          <div style="position:absolute;bottom:0;left:0;right:0;
-                      background:linear-gradient(transparent,rgba(0,0,0,.75));padding:.75rem 1rem;">
+        <div style="position:relative;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;max-height:300px;background:#000;">
+          <img id="cam-photo-preview" src="" alt="Foto capturada" style="width:100%;max-height:300px;object-fit:contain;display:block;">
+          <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.75));padding:.75rem 1rem;">
             <div id="geo-status" style="display:none;"></div>
-            <div id="geo-error" style="display:none;color:rgba(255,255,255,.65);font-size:.75rem;">
-              &#8505;&#65039; GPS n&atilde;o dispon&iacute;vel &mdash; foto salva sem coordenadas
-            </div>
+            <div id="geo-error" style="display:none;color:rgba(255,255,255,.65);font-size:.75rem;">GPS n&atilde;o dispon&iacute;vel - foto salva sem coordenadas</div>
           </div>
         </div>
         <div style="display:flex;gap:.5rem;margin-top:.625rem;justify-content:space-between;align-items:center;">
-          <a id="btn-ver-mapa" href="#" target="_blank" rel="noopener noreferrer"
-             style="display:none;align-items:center;gap:4px;font-size:.8rem;font-weight:600;
-                    color:var(--primary);text-decoration:none;border:1px solid var(--border);
-                    border-radius:var(--radius);padding:4px 10px;background:var(--surface);
-                    white-space:nowrap;transition:background .15s;"
-             onmouseover="this.style.background='var(--bg)'"
-             onmouseout="this.style.background='var(--surface)'">
-            &#127759; Ver no Mapa
-          </a>
+          <a id="btn-ver-mapa" href="#" target="_blank" rel="noopener noreferrer" style="display:none;align-items:center;gap:4px;font-size:.8rem;font-weight:600;color:var(--primary);text-decoration:none;border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;background:var(--surface);white-space:nowrap;transition:background .15s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='var(--surface)'">Ver no Mapa</a>
           <div style="display:flex;gap:.5rem;align-items:center;">
-            <span style="font-size:.78rem;color:var(--green);font-weight:600;">&#10003; Foto capturada</span>
-            <button type="button" id="btn-retake" class="btn btn-outline btn-sm">
-              &#8635; Tirar Novamente
-            </button>
+            <span style="font-size:.78rem;color:var(--green);font-weight:600;">Foto capturada</span>
+            <button type="button" id="btn-retake" class="btn btn-outline btn-sm">Tirar Novamente</button>
           </div>
         </div>
       </div>
-
     </div>
 
-    <!-- SUBMIT -->
     <div style="display:flex;gap:.75rem;justify-content:flex-end;padding:1rem 0 .5rem;">
       <a href="/minhassafs" class="btn btn-outline">Cancelar</a>
-      <button type="submit" id="btn-submit" class="btn btn-accent btn-lg" disabled>
-        Enviar Solicita&ccedil;&atilde;o
-      </button>
+      <button type="submit" id="btn-submit" class="btn btn-accent btn-lg" disabled>Enviar Solicita&ccedil;&atilde;o</button>
     </div>
-
   </form>
 </div>
 
-
-
-<!-- ============================================================
-     CAMERA OVERLAY (full-screen, opens via button)
-     - Rear camera preferred (facingMode: environment)
-     - No gallery access
-     - Orange corner guide for equipment framing
-     ============================================================ -->
-<div id="camera-overlay"
-     style="display:none;position:fixed;inset:0;background:#000;
-            z-index:9990;flex-direction:column;overflow:hidden;">
-
-  <!-- Live video area — altura limitada para deixar espaço para os controles -->
+<div id="camera-overlay" style="display:none;position:fixed;inset:0;background:#000;z-index:9990;flex-direction:column;overflow:hidden;">
   <div style="position:relative;flex:1;min-height:0;overflow:hidden;">
-    <video id="cam-video" autoplay playsinline muted
-           style="width:100%;height:100%;object-fit:cover;
-                  max-height:calc(100dvh - 100px);"></video>
-
-    <!-- Framing guide: box-shadow darkens area OUTSIDE the orange square -->
-    <div id="cam-guide"
-         style="position:absolute;
-                top:50%;left:50%;
-                transform:translate(-50%, -50%);
-                width:min(35vw, 42vh);
-                height:min(35vw, 42vh);
-                box-shadow:0 0 0 9999px rgba(0,0,0,0.58);
-                border-radius:5px;
-                pointer-events:none;">
-
-      <!-- Corner marks (brand orange) -->
-      <div style="position:absolute;top:-2px;left:-2px;width:30px;height:30px;
-                  border-top:3px solid var(--accent);border-left:3px solid var(--accent);
-                  border-radius:4px 0 0 0;"></div>
-      <div style="position:absolute;top:-2px;right:-2px;width:30px;height:30px;
-                  border-top:3px solid var(--accent);border-right:3px solid var(--accent);
-                  border-radius:0 4px 0 0;"></div>
-      <div style="position:absolute;bottom:-2px;left:-2px;width:30px;height:30px;
-                  border-bottom:3px solid var(--accent);border-left:3px solid var(--accent);
-                  border-radius:0 0 0 4px;"></div>
-      <div style="position:absolute;bottom:-2px;right:-2px;width:30px;height:30px;
-                  border-bottom:3px solid var(--accent);border-right:3px solid var(--accent);
-                  border-radius:0 0 4px 0;"></div>
-
-      <!-- Instruction below the square -->
-      <div style="position:absolute;bottom:-44px;left:50%;transform:translateX(-50%);
-                  white-space:nowrap;color:#fff;font-size:.8rem;font-weight:700;
-                  text-shadow:0 1px 6px rgba(0,0,0,1);letter-spacing:.04em;">
-        Encaixe o equipamento dentro do quadro
-      </div>
+    <video id="cam-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;max-height:calc(100dvh - 100px);"></video>
+    <div id="cam-guide" style="position:absolute;top:50%;left:50%;transform:translate(-50%, -50%);width:min(35vw, 42vh);height:min(35vw, 42vh);box-shadow:0 0 0 9999px rgba(0,0,0,0.58);border-radius:5px;pointer-events:none;">
+      <div style="position:absolute;top:-2px;left:-2px;width:30px;height:30px;border-top:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:4px 0 0 0;"></div>
+      <div style="position:absolute;top:-2px;right:-2px;width:30px;height:30px;border-top:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 4px 0 0;"></div>
+      <div style="position:absolute;bottom:-2px;left:-2px;width:30px;height:30px;border-bottom:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:0 0 0 4px;"></div>
+      <div style="position:absolute;bottom:-2px;right:-2px;width:30px;height:30px;border-bottom:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 0 4px 0;"></div>
+      <div style="position:absolute;bottom:-44px;left:50%;transform:translateX(-50%);white-space:nowrap;color:#fff;font-size:.8rem;font-weight:700;text-shadow:0 1px 6px rgba(0,0,0,1);letter-spacing:.04em;">Encaixe o equipamento dentro do quadro</div>
     </div>
   </div>
 
-  <!-- Controls bar — sempre visível, altura fixa -->
-  <div style="background:#111;padding:.75rem 2rem;display:flex;align-items:center;
-              justify-content:space-between;flex-shrink:0;
-              min-height:90px;max-height:100px;">
-
-    <!-- Close -->
-    <button id="btn-close-cam" type="button"
-            style="width:50px;height:50px;border-radius:50%;
-                   background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);
-                   color:#fff;font-size:1.3rem;cursor:pointer;
-                   display:flex;align-items:center;justify-content:center;">&#x2715;</button>
-
-    <!-- Capture (big circular shutter) -->
-    <button id="btn-capture" type="button"
-            style="width:70px;height:70px;border-radius:50%;
-                   background:#fff;border:5px solid rgba(255,255,255,.35);
-                   cursor:pointer;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#111;padding:.75rem 2rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;min-height:90px;max-height:100px;">
+    <button id="btn-close-cam" type="button" style="width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);color:#fff;font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">&#x2715;</button>
+    <button id="btn-capture" type="button" style="width:70px;height:70px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;display:flex;align-items:center;justify-content:center;">
       <div style="width:50px;height:50px;border-radius:50%;background:var(--accent);"></div>
     </button>
-
-    <!-- Spacer -->
     <div style="width:50px;"></div>
   </div>
 
-  <!-- Off-screen canvas for frame capture -->
   <canvas id="cam-canvas" style="display:none;"></canvas>
 </div>
+
+<style>
+  .nova-saf-clean .tipo-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-top: .4rem;
+  }
+
+  .nova-saf-clean .tipo-tab {
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: .72rem .95rem;
+    font-weight: 700;
+    font-size: .84rem;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+  }
+
+  .nova-saf-clean .tipo-tab:hover {
+    border-color: var(--primary);
+    background: rgba(27,42,94,.04);
+  }
+
+  .nova-saf-clean .tipo-tab.selected {
+    border-color: var(--primary);
+    background: rgba(27,42,94,.08);
+    box-shadow: 0 0 0 3px rgba(27,42,94,.12);
+  }
+
+  .nova-saf-clean .flux-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .95rem;
+    margin-top: .75rem;
+  }
+
+  .nova-saf-clean .flux-grid-top.top-estacao-on {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .nova-saf-clean .flux-grid-top.top-via-on {
+    grid-template-columns: 1.5fr .95fr .9fr .9fr .9fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout .est-row {
+    margin-top: .75rem;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-1,
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-2,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-1,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-2,
+  .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-1 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-3 {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-falha,
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-4,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-falha,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-4,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-4 {
+    display: none;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-falha,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-falha {
+    display: none;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-1,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-falha,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .nova-saf-clean .flux-grid.flux-grid-mro {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .nova-saf-clean .flux-grid.flux-grid-via {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .nova-saf-clean .via-input {
+    font-size: clamp(.86rem, 2.2vw, .95rem);
+  }
+
+  .nova-saf-clean .compact-select {
+    min-height: 42px;
+    height: 42px;
+    font-size: .95rem;
+    font-weight: 400;
+  }
+
+  .nova-saf-clean .native-select-hidden {
+    display: none;
+  }
+
+  .nova-saf-clean .searchable-select {
+    position: relative;
+  }
+
+  .nova-saf-clean .searchable-input {
+    min-height: 42px;
+    height: 42px;
+    font-size: .95rem;
+    padding-right: 2.2rem;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+      linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 17px, calc(100% - 12px) 17px;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+  }
+
+  .nova-saf-clean .searchable-menu {
+    position: absolute;
+    z-index: 20;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .12);
+  }
+
+  .nova-saf-clean .searchable-option {
+    padding: .55rem .75rem;
+    font-size: .92rem;
+    color: var(--text);
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0, 0, 0, .04);
+  }
+
+  .nova-saf-clean .searchable-option:last-child {
+    border-bottom: 0;
+  }
+
+  .nova-saf-clean .searchable-option:hover,
+  .nova-saf-clean .searchable-option.active {
+    background: rgba(27, 42, 94, .08);
+  }
+
+  .nova-saf-clean .searchable-empty {
+    padding: .55rem .75rem;
+    font-size: .88rem;
+    color: var(--text-muted);
+  }
+
+  .nova-saf-clean .clean-label {
+    font-weight: 400;
+  }
+
+  .nova-saf-clean .avaria-legenda {
+    margin-top: .45rem;
+    font-size: .78rem;
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  @media (max-width: 760px) {
+    .nova-saf-clean .flux-grid {
+      grid-template-columns: 1fr;
+      gap: .75rem;
+    }
+
+    .nova-saf-clean .flux-grid-top.top-estacao-on,
+    .nova-saf-clean .flux-grid-top.top-estacao-on {
+      grid-template-columns: 1fr;
+    }
+
+    .nova-saf-clean .flux-grid-top.top-via-on {
+      grid-template-columns: 1fr 1fr;
+      gap: .75rem;
+    }
+
+    .nova-saf-clean .flux-grid-top.top-via-on #fluxo-linha-wrap {
+      grid-column: 1;
+    }
+
+    .nova-saf-clean .flux-grid-top.top-via-on #fluxo-via-wrap {
+      grid-column: 2;
+    }
+
+    .nova-saf-clean .flux-grid-top.top-via-on #fluxo-km-inicial-wrap {
+      grid-column: 1;
+    }
+
+    .nova-saf-clean .flux-grid-top.top-via-on #fluxo-km-final-wrap {
+      grid-column: 2;
+    }
+
+    .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-1,
+    .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-2,
+    .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-falha,
+    .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-4,
+    .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-1,
+    .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-2,
+    .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-falha,
+    .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-4,
+    .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-1,
+    .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-2 {
+      grid-template-columns: 1fr;
+    }
+
+    .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-3,
+    .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-3 {
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: .5rem;
+    }
+
+  }
+</style>
 {% endblock %}
 
 {% block page_script %}
@@ -528,730 +485,866 @@ document.addEventListener('DOMContentLoaded', async function () {
   const user = Auth.requireAuth(['SOLICITANTE']);
   if (!user) return;
 
-  // Default date/time = now
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  document.getElementById('data_inicio_avaria').value =
-    `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-  document.getElementById('hora_inicio_avaria').value =
-    `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  document.getElementById('prioridade').value = 'ALTA';
+  const SISTEMAS_POR_TIPO = {
+    MRO: ['1'],
+    ESTACAO: ['2', '5', '7', '8'],
+    VIA: ['3', '4', '6'],
+  };
 
-  // ── GPS (captura silenciosa para busca por proximidade) ────────────
-  window._gpsPosition = null;
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        window._gpsPosition = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
-      },
-      () => { /* GPS não disponível – pesquisa funciona sem ele */ },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 }
-    );
-  }
+  const btnSubmit = document.getElementById('btn-submit');
+  const linhaSel = document.getElementById('fluxo-linha');
+  const prioSel = document.getElementById('fluxo-prioridade');
+  const linhaWrap = document.getElementById('fluxo-linha-wrap');
+  const prioridadeWrap = document.getElementById('fluxo-prioridade-wrap');
+  const sistemaWrap = document.getElementById('fluxo-sistema-wrap');
+  const prioSistemaGrid = document.getElementById('flux-grid-prio-sistema');
+  const subsFalhaGrid = document.getElementById('flux-grid-subs-falha');
+  const trechoEquipGrid = document.getElementById('flux-grid-trecho-equip');
+  const sistemaSel = document.getElementById('fluxo-sistema');
+  const subsistemaSel = document.getElementById('fluxo-subsistema');
+  const subsistemaWrap = document.getElementById('fluxo-subsistema-wrap');
+  const falhaSel = document.getElementById('fluxo-falha');
+  const falhaWrap = document.getElementById('fluxo-falha-wrap');
+  const trechoSel = document.getElementById('fluxo-trecho');
+  const viaKmGrid = document.getElementById('via-km-grid');
+  const viaWrap = document.getElementById('fluxo-via-wrap');
+  const kmInicialWrap = document.getElementById('fluxo-km-inicial-wrap');
+  const kmFinalWrap = document.getElementById('fluxo-km-final-wrap');
+  const viaInput = document.getElementById('fluxo-via');
+  const kmInicialInput = document.getElementById('fluxo-km-inicial');
+  const kmFinalInput = document.getElementById('fluxo-km-final');
+  const estacaoSel = document.getElementById('fluxo-estacao');
+  const trechoWrap = document.getElementById('fluxo-trecho-wrap');
+  const equipamentoWrap = document.getElementById('fluxo-equipamento-wrap');
+  const equipamentoAmvWrap = document.getElementById('fluxo-equipamento-amv-wrap');
+  const equipamentoAmvSel = document.getElementById('fluxo-equipamento-amv');
+  const mroTrensGrid = document.getElementById('mro-trens-grid');
+  const serieSel = document.getElementById('fluxo-serie');
+  const tremSel = document.getElementById('fluxo-trem');
+  const carroSel = document.getElementById('fluxo-carro');
+  const trechoRequiredEl = document.getElementById('trecho-required');
+  const equipamentoRequiredEl = document.getElementById('equipamento-required');
+  const viaRequiredEl = document.getElementById('via-required');
+  const kmInicialRequiredEl = document.getElementById('km-inicial-required');
+  const kmFinalRequiredEl = document.getElementById('km-final-required');
+  const topEstacaoWrap = document.getElementById('top-estacao-wrap');
+  const topGrid = document.getElementById('flux-grid-top');
+  const estacaoSistemaLayout = document.getElementById('estacao-sistema-layout');
+  const estacaoRow1 = document.getElementById('estacao-row-1');
+  const estacaoRow2 = document.getElementById('estacao-row-2');
+  const estacaoRowFalha = document.getElementById('estacao-row-falha');
+  const estacaoRow3 = document.getElementById('estacao-row-3');
+  const estacaoRow4 = document.getElementById('estacao-row-4');
+  const prioridadeGrid = prioridadeWrap ? prioridadeWrap.parentElement : null;
+  const viaKmGridOriginal = viaKmGrid;
+  const descricaoInput = document.getElementById('descricao_falha');
+  const equipamentoCurtoInput = document.getElementById('equipamento_curto');
+  const avariaLegenda = document.getElementById('avaria-legenda');
 
-  // ── State ─────────────────────────────────────────
+  const sistemaIdHidden = document.getElementById('sistema_id');
+  const subsistemaIdHidden = document.getElementById('subsistema_id');
+  const prioridadeHidden = document.getElementById('prioridade');
+  const dataInicioHidden = document.getElementById('data_inicio_avaria');
+  const horaInicioHidden = document.getElementById('hora_inicio_avaria');
+  const viaNumeroHidden = document.getElementById('via_numero');
+  const kmInicialHidden = document.getElementById('km_inicial');
+  const kmFinalHidden = document.getElementById('km_final');
+  const localInstalacaoIdHidden = document.getElementById('local_instalacao_id');
+  const localInstalacaoNomeHidden = document.getElementById('local_instalacao_nome');
+
+  const searchableSelects = [linhaSel, sistemaSel, subsistemaSel, falhaSel, trechoSel, estacaoSel, serieSel, tremSel, carroSel, equipamentoAmvSel];
+
+  let tipoSelecionado = 'ESTACAO';
+  let subsistemasCache = [];
+  let sistemasCache = [];
+  const linhaOptionsPadrao = linhaSel.innerHTML;
+  let _camStream = null;
+  let avariaDataHoraTexto = '';
   window._capturedPhoto = null;
-  let _camStream    = null;
-  let _sugestaoSel  = null;   // selected suggestion object { equip_id, equip_nome, local_id, local_nome, sintoma_id, sintoma_nome }
-  let _suggestTimer = null;
-  let _tipoSelecionado = '';
-  const btnSubmit  = document.getElementById('btn-submit');
-  const prioHidden = document.getElementById('prioridade');
-  const secOQue = document.getElementById('sec-oque');
-  const descFalhaWrap = document.getElementById('desc-falha-wrap');
-  const estacaoDropdownWrap = document.getElementById('estacao-dropdown-wrap');
-  const estacaoLinhaSel = document.getElementById('estacao-linha');
-  const estacaoLocalSel = document.getElementById('estacao-local');
-  const manLocalLabel = document.getElementById('man-local-label');
-  const manEquipLabel = document.getElementById('man-equip-label');
-  const manLocalSelectWrap = document.getElementById('man-local-select-wrap');
-  const manLinhaInputWrap = document.getElementById('man-linha-input-wrap');
-  const manLinhaSelect = document.getElementById('man-linha-select');
-  const viaExtraFields = document.getElementById('via-extra-fields');
-  const viaKmSel = document.getElementById('via-km');
-  const viaPosteSel = document.getElementById('via-poste');
-  const ocorrenciaCheckbox = document.getElementById('ocorrencia_cliente');
-  const descricaoOcorrenciaWrap = document.getElementById('descricao-ocorrencia-wrap');
-  const descricaoOcorrenciaInput = document.getElementById('descricao_ocorrencia');
-  let _estacoes = [];
-  let _estacoesPorLinha = {};
+  const searchableUiMap = new Map();
 
-  function resetEstacaoDropdowns() {
-    estacaoLinhaSel.value = '';
-    estacaoLocalSel.innerHTML = '<option value="">Selecione a linha primeiro</option>';
-    estacaoLocalSel.disabled = true;
+  function escHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;');
   }
 
-  function popularEstacoesPorLinha(linha) {
-    const estacoes = _estacoesPorLinha[linha] || [];
-    if (!linha) {
-      estacaoLocalSel.innerHTML = '<option value="">Selecione a linha primeiro</option>';
-      estacaoLocalSel.disabled = true;
-      return;
+  function setNowReadOnlyDateTime() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+
+    const dd = pad(now.getDate());
+    const mm = pad(now.getMonth() + 1);
+    const yyyy = now.getFullYear();
+    const hh = pad(now.getHours());
+    const min = pad(now.getMinutes());
+
+    avariaDataHoraTexto = `${dd}/${mm}/${yyyy} - ${hh}:${min}`;
+    avariaLegenda.textContent = `Data e hora da avaria: ${avariaDataHoraTexto}`;
+    dataInicioHidden.value = `${yyyy}-${mm}-${dd}`;
+    horaInicioHidden.value = `${hh}:${min}`;
+  }
+
+  function closeAllSearchableMenus(exceptId = '') {
+    searchableUiMap.forEach((ui, selectId) => {
+      if (selectId === exceptId) return;
+      ui.menu.style.display = 'none';
+    });
+  }
+
+  function initSearchableSelect(selectEl) {
+    if (!selectEl || searchableUiMap.has(selectEl.id)) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'searchable-select';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control searchable-input';
+    input.placeholder = '';
+    input.autocomplete = 'off';
+
+    const menu = document.createElement('div');
+    menu.className = 'searchable-menu';
+    menu.style.display = 'none';
+
+    selectEl.classList.add('native-select-hidden');
+    selectEl.insertAdjacentElement('afterend', wrapper);
+    wrapper.appendChild(input);
+    wrapper.appendChild(menu);
+
+    function selectedLabel() {
+      const selected = selectEl.options[selectEl.selectedIndex];
+      return selected ? String(selected.text || '') : '';
     }
-    if (!estacoes.length) {
-      estacaoLocalSel.innerHTML = '<option value="">Nenhuma estacao encontrada para esta linha</option>';
-      estacaoLocalSel.disabled = true;
-      return;
+
+    function setDisabledState() {
+      input.disabled = !!selectEl.disabled;
+      wrapper.style.opacity = selectEl.disabled ? '.72' : '1';
+      wrapper.style.pointerEvents = selectEl.disabled ? 'none' : 'auto';
     }
-    estacaoLocalSel.innerHTML = '<option value="">Selecione a esta&ccedil;&atilde;o</option>' +
-      estacoes.map(e => {
-        const sigla = String(e.sigla || '').trim();
-        const label = sigla ? `${e.estacao} (${sigla})` : e.estacao;
-        return `<option value="${e.id}">${escHtml(label)}</option>`;
+
+    function renderOptions(term = '') {
+      const filter = String(term || '').trim().toLowerCase();
+      const options = Array.from(selectEl.options)
+        .filter(opt => String(opt.value || '').trim() !== '')
+        .filter(opt => String(opt.text || '').toLowerCase().includes(filter));
+
+      if (!options.length) {
+        menu.innerHTML = '<div class="searchable-empty"></div>';
+        return;
+      }
+
+      const current = String(selectEl.value || '');
+      menu.innerHTML = options.map(opt => {
+        const isActive = String(opt.value || '') === current;
+        return `<div class="searchable-option${isActive ? ' active' : ''}" data-value="${escHtml(opt.value)}">${escHtml(opt.text)}</div>`;
       }).join('');
-    estacaoLocalSel.disabled = false;
+    }
+
+    function syncFromSelect() {
+      input.value = String(selectedLabel() || '');
+      setDisabledState();
+      renderOptions(input.value);
+    }
+
+    input.addEventListener('focus', () => {
+      if (input.disabled) return;
+      closeAllSearchableMenus(selectEl.id);
+      renderOptions(input.value);
+      menu.style.display = 'block';
+      input.select();
+    });
+
+    input.addEventListener('input', () => {
+      closeAllSearchableMenus(selectEl.id);
+      renderOptions(input.value);
+      menu.style.display = 'block';
+    });
+
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        menu.style.display = 'none';
+        input.value = selectedLabel();
+      }
+    });
+
+    menu.addEventListener('mousedown', event => {
+      const optionEl = event.target.closest('.searchable-option');
+      if (!optionEl) return;
+      const value = optionEl.getAttribute('data-value') || '';
+      selectEl.value = value;
+      selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+      syncFromSelect();
+      menu.style.display = 'none';
+      event.preventDefault();
+    });
+
+    selectEl.addEventListener('change', syncFromSelect);
+
+    const observer = new MutationObserver(() => {
+      syncFromSelect();
+    });
+    observer.observe(selectEl, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+
+    searchableUiMap.set(selectEl.id, { selectEl, input, menu, syncFromSelect, renderOptions });
+    syncFromSelect();
   }
 
-  async function carregarLocaisEstacao() {
-    if (_estacoes.length) return;
-    const res = await API.estacoes();
-    if (!res.ok || !res.data.estacoes?.length) {
-      _estacoes = [];
-      _estacoesPorLinha = {};
-      estacaoLinhaSel.innerHTML = '<option value="">Nenhuma linha encontrada</option>';
+  function refreshSearchableSelect(selectEl) {
+    const ui = selectEl ? searchableUiMap.get(selectEl.id) : null;
+    if (!ui) return;
+    ui.syncFromSelect();
+  }
+
+  function resetFalhaSelect() {
+    falhaSel.innerHTML = '<option value=""></option>';
+    falhaSel.disabled = true;
+    document.getElementById('sintoma_id').value = '';
+    refreshSearchableSelect(falhaSel);
+  }
+
+  function resetMroTrens() {
+    serieSel.innerHTML = '<option value=""></option>';
+    tremSel.innerHTML = '<option value=""></option>';
+    carroSel.innerHTML = '<option value=""></option>';
+    serieSel.disabled = true;
+    tremSel.disabled = true;
+    carroSel.disabled = true;
+    refreshSearchableSelect(serieSel);
+    refreshSearchableSelect(tremSel);
+    refreshSearchableSelect(carroSel);
+  }
+
+  function normalizeText(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .trim();
+  }
+
+  function isSubsistemaAmvVia() {
+    if (tipoSelecionado !== 'VIA') return false;
+    const label = (subsistemaSel.options[subsistemaSel.selectedIndex]?.textContent || '').trim();
+    const norm = normalizeText(label);
+    return norm.includes('APARELHO DE MUDANCA DE VIA');
+  }
+
+  async function carregarEquipamentosAmvVia() {
+    equipamentoAmvSel.innerHTML = '<option value=""></option>';
+    equipamentoAmvSel.disabled = true;
+    refreshSearchableSelect(equipamentoAmvSel);
+
+    const res = await API.opcoesFormulario({ tipo: 'amv' });
+    if (!res.ok || !res.data.opcoes?.length) {
       return;
     }
 
-    _estacoes = res.data.estacoes;
-    _estacoesPorLinha = {};
-    _estacoes.forEach(e => {
-      const linha = String(e.linha || '').trim();
-      if (!linha) return;
-      if (!_estacoesPorLinha[linha]) _estacoesPorLinha[linha] = [];
-      _estacoesPorLinha[linha].push(e);
-    });
-
-    const linhas = Object.keys(_estacoesPorLinha).sort((a, b) =>
-      a.localeCompare(b, 'pt-BR', { numeric: true })
-    );
-    estacaoLinhaSel.innerHTML = '<option value="">Selecione a linha</option>' +
-      linhas.map(l => `<option value="${escHtml(l)}">${escHtml(l)}</option>`).join('');
-
-    Object.keys(_estacoesPorLinha).forEach(linha => {
-      _estacoesPorLinha[linha].sort((a, b) =>
-        String(a.estacao || '').localeCompare(String(b.estacao || ''), 'pt-BR')
-      );
-    });
+    equipamentoAmvSel.innerHTML = '<option value=""></option>' +
+      res.data.opcoes.map(item => `<option value="${escHtml(item.value)}">${escHtml(item.label)}</option>`).join('');
+    equipamentoAmvSel.disabled = false;
+    refreshSearchableSelect(equipamentoAmvSel);
   }
 
-  function setViaLineOptions() {
-    manLinhaSelect.innerHTML = [
-      '<option value="">Selecione a linha</option>',
-      '<option value="11">11</option>',
-      '<option value="12">12</option>',
-      '<option value="13">13</option>'
-    ].join('');
-  }
+  async function atualizarCampoEquipamentoPorSubsistema() {
+    const usarAmv = isSubsistemaAmvVia();
 
-  function isFluxoHabilitado() {
-    return _tipoSelecionado === 'ESTACAO' || _tipoSelecionado === 'MRO' || _tipoSelecionado === 'VIA';
-  }
-
-  function fillZeroTo99(selectEl, placeholder) {
-    if (!selectEl) return;
-    const opts = [`<option value="">${placeholder}</option>`];
-    for (let i = 0; i <= 99; i += 1) {
-      const v = String(i).padStart(2, '0');
-      opts.push(`<option value="${v}">${v}</option>`);
-    }
-    selectEl.innerHTML = opts.join('');
-  }
-
-  fillZeroTo99(viaKmSel, 'Selecione o KM');
-  fillZeroTo99(viaPosteSel, 'Selecione o poste');
-  setViaLineOptions();
-
-  function toggleDescricaoOcorrencia() {
-    if (!ocorrenciaCheckbox || !descricaoOcorrenciaWrap || !descricaoOcorrenciaInput) return;
-    if (ocorrenciaCheckbox.checked) {
-      descricaoOcorrenciaWrap.style.display = 'block';
-      return;
-    }
-    descricaoOcorrenciaWrap.style.display = 'none';
-    descricaoOcorrenciaInput.value = '';
-  }
-
-  if (ocorrenciaCheckbox) {
-    ocorrenciaCheckbox.addEventListener('change', toggleDescricaoOcorrencia);
-    toggleDescricaoOcorrencia();
-  }
-
-  function updateFluxoUi() {
-    const desc = document.getElementById('descricao_falha');
-    const btnToggleManual = document.getElementById('btn-toggle-manual');
-    const sinSel = document.getElementById('man-sintoma');
-
-    if (_tipoSelecionado === 'MRO') {
-      descFalhaWrap.style.display = 'block';
-      estacaoDropdownWrap.style.display = 'none';
-      btnToggleManual.style.display = 'inline-flex';
-      document.getElementById('estacao-tipo-falha-wrap').style.display = 'none';
-      document.getElementById('descricao-item3-wrap').style.display = 'block';
-      desc.placeholder = 'Digite o prefixo do trem para localizar a frota...';
-      manLocalLabel.textContent = 'Série de trem';
-      manEquipLabel.textContent = 'Prefixo';
-      manLocalSelectWrap.style.display = 'block';
-      manLinhaInputWrap.style.display = 'none';
-      viaExtraFields.style.display = 'none';
-      btnToggleManual.innerHTML = '<span id="manual-icon" style="display:inline-block;transition:transform .2s;">&#9654;</span> N&atilde;o encontrou? Especifique manualmente';
-      sinSel.innerHTML = '<option value="">N&atilde;o aplic&aacute;vel para MRO</option>';
-      sinSel.disabled = true;
-    } else if (_tipoSelecionado === 'VIA') {
-      descFalhaWrap.style.display = 'block';
-      estacaoDropdownWrap.style.display = 'none';
-      btnToggleManual.style.display = 'inline-flex';
-      document.getElementById('estacao-tipo-falha-wrap').style.display = 'none';
-      document.getElementById('descricao-item3-wrap').style.display = 'block';
-      desc.placeholder = 'Digite o trecho para busca inteligente (descricao da via)...';
-      manLocalLabel.textContent = 'Linha';
-      manEquipLabel.textContent = 'Trecho';
-      manLocalSelectWrap.style.display = 'none';
-      manLinhaInputWrap.style.display = 'block';
-      viaExtraFields.style.display = 'grid';
-      btnToggleManual.innerHTML = '<span id="manual-icon" style="display:inline-block;transition:transform .2s;">&#9654;</span> N&atilde;o encontrou? Especifique manualmente';
-      sinSel.innerHTML = '<option value="">N&atilde;o aplic&aacute;vel para Via</option>';
-      sinSel.disabled = true;
-    } else if (_tipoSelecionado === 'ESTACAO') {
-      desc.placeholder = 'EX: Estação, Base';
-      descFalhaWrap.style.display = 'none';
-      estacaoDropdownWrap.style.display = 'block';
-      btnToggleManual.style.display = 'none';
-      document.getElementById('estacao-tipo-falha-wrap').style.display = 'block';
-      document.getElementById('descricao-item3-wrap').style.display = 'block';
-      manLocalLabel.textContent = 'Local de instalação';
-      manEquipLabel.textContent = 'Equipamento';
-      manLocalSelectWrap.style.display = 'block';
-      manLinhaInputWrap.style.display = 'none';
-      viaExtraFields.style.display = 'none';
-      btnToggleManual.innerHTML = '<span id="manual-icon" style="display:inline-block;transition:transform .2s;">&#9654;</span> N&atilde;o encontrou? Especifique manualmente';
+    if (usarAmv) {
+      equipamentoWrap.style.display = 'none';
+      equipamentoCurtoInput.value = '';
+      document.getElementById('equipamento_nome').value = '';
+      await carregarEquipamentosAmvVia();
+      equipamentoAmvWrap.style.display = 'block';
+      if (equipamentoAmvWrap.parentElement !== estacaoRow4) {
+        estacaoRow4.appendChild(equipamentoAmvWrap);
+      }
     } else {
-      descFalhaWrap.style.display = 'block';
-      estacaoDropdownWrap.style.display = 'none';
-      btnToggleManual.style.display = 'inline-flex';
-      document.getElementById('estacao-tipo-falha-wrap').style.display = 'none';
-      document.getElementById('descricao-item3-wrap').style.display = 'block';
-      desc.placeholder = 'EX: Estacao, Base';
-      manLocalLabel.textContent = 'Local de instalação';
-      manEquipLabel.textContent = 'Equipamento';
-      manLocalSelectWrap.style.display = 'block';
-      manLinhaInputWrap.style.display = 'none';
-      viaExtraFields.style.display = 'none';
-      btnToggleManual.innerHTML = '<span id="manual-icon" style="display:inline-block;transition:transform .2s;">&#9654;</span> N&atilde;o encontrou? Especifique manualmente';
+      equipamentoAmvWrap.style.display = 'none';
+      equipamentoAmvSel.value = '';
+      equipamentoAmvSel.disabled = true;
+      refreshSearchableSelect(equipamentoAmvSel);
+      equipamentoWrap.style.display = tipoSelecionado === 'MRO' ? 'none' : 'block';
+      document.getElementById('equipamento_nome').value = equipamentoCurtoInput.value.trim();
     }
   }
 
-  function resetManualMroState() {
-    manualOpen = false;
-    manualLoaded = false;
-    document.getElementById('manual-section').style.display = 'none';
-    document.getElementById('manual-icon').style.transform = '';
-    document.getElementById('man-local').innerHTML = '<option value="">Carregando...</option>';
-    document.getElementById('man-equip').innerHTML = '<option value="">Selecione o local primeiro</option>';
-    document.getElementById('man-equip').disabled = true;
-    document.getElementById('man-sintoma').innerHTML = '<option value="">Selecione o equipamento primeiro</option>';
-    document.getElementById('man-sintoma').disabled = true;
-    setViaLineOptions();
-    manLinhaSelect.value = '';
-    fillZeroTo99(viaKmSel, 'Selecione o KM');
-    fillZeroTo99(viaPosteSel, 'Selecione o poste');
-    limparSelecao();
+  function normalizeVia(value) {
+    return String(value || '').replace(/\D/g, '').slice(0, 3);
   }
 
-  function resetEtapaOQue() {
-    clearTimeout(_suggestTimer);
-    document.getElementById('descricao_falha').value = '';
-    document.getElementById('descricao_item3').value = '';
-    document.getElementById('desc-error').style.display = 'none';
-    document.getElementById('equip-error').style.display = 'none';
-    document.getElementById('suggest-area').style.display = 'none';
-    document.getElementById('suggest-list').innerHTML = '';
-    document.getElementById('suggest-loading').style.display = 'none';
-    document.getElementById('suggest-empty').style.display = 'none';
-    document.getElementById('btn-falha-civil').classList.remove('selected');
-    document.getElementById('btn-falha-eletrica').classList.remove('selected');
-    document.getElementById('falha-civil-wrap').style.display = 'none';
-    document.getElementById('falha-eletrica-wrap').style.display = 'none';
-    document.getElementById('falha-civil-sel').value = '';
-    document.getElementById('falha-eletrica-sel').value = '';
-    document.getElementById('falha-civil-numero').value = '';
-    document.getElementById('falha-civil-numero').disabled = false;
-    document.getElementById('falha-eletrica-numero').value = '';
-    limparSelecao();
+  function formatKmInput(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 4);
+    if (digits.length <= 2) return digits;
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   }
 
-  function fillFalhaNumero() {
-    const targets = ['falha-civil-numero', 'falha-eletrica-numero'];
-    targets.forEach(id => {
-      const sel = document.getElementById(id);
-      if (!sel) return;
-      for (let i = 0; i <= 99; i++) {
-        const txt = String(i).padStart(2, '0');
-        const opt = document.createElement('option');
-        opt.value = txt;
-        opt.textContent = txt;
-        sel.appendChild(opt);
-      }
-    });
-  }
-  fillFalhaNumero();
-
-  function updateCivilNumeroRestriction() {
-    const falhaCivilSel = document.getElementById('falha-civil-sel');
-    const numeroCivilSel = document.getElementById('falha-civil-numero');
-    const falhasSemNumero = ['Falta de água', 'Piso quebrado', 'Vazamento'];
-    const falhaAtual = falhaCivilSel.value || '';
-    const deveBloquear = !falhaAtual || falhasSemNumero.includes(falhaAtual);
-    numeroCivilSel.disabled = deveBloquear;
-    if (deveBloquear) numeroCivilSel.value = '';
+  function isKmCompleto(value) {
+    return /^\d{2}\/\d{2}$/.test(String(value || ''));
   }
 
-  function updateEletricaNumeroRestriction() {
-    const falhaEletricaSel = document.getElementById('falha-eletrica-sel');
-    const numeroEletricaSel = document.getElementById('falha-eletrica-numero');
-    const falhaAtual = falhaEletricaSel.value || '';
-    const deveBloquear = !falhaAtual;
-    numeroEletricaSel.disabled = deveBloquear;
-    if (deveBloquear) numeroEletricaSel.value = '';
+  function resetViaCampos() {
+    viaInput.value = '';
+    kmInicialInput.value = '';
+    kmFinalInput.value = '';
+    viaNumeroHidden.value = '';
+    kmInicialHidden.value = '';
+    kmFinalHidden.value = '';
   }
 
-  function bloquearEtapaOQue() {
-    secOQue.classList.add('step-locked');
-    document.getElementById('suggest-area').style.display = 'none';
-    document.getElementById('suggest-list').innerHTML = '';
-    document.getElementById('suggest-loading').style.display = 'none';
-    document.getElementById('suggest-empty').style.display = 'none';
+  function resetCamposFormulario() {
+    linhaSel.value = '';
+    prioSel.value = '';
+    sistemaSel.value = '';
+    subsistemaSel.value = '';
+    falhaSel.value = '';
+    trechoSel.value = '';
+    estacaoSel.value = '';
+    serieSel.value = '';
+    tremSel.value = '';
+    carroSel.value = '';
+    equipamentoCurtoInput.value = '';
+    equipamentoAmvSel.value = '';
+    descricaoInput.value = '';
+    resetViaCampos();
+
+    sistemaIdHidden.value = '';
+    subsistemaIdHidden.value = '';
+    prioridadeHidden.value = '';
+    document.getElementById('sintoma_id').value = '';
+    document.getElementById('equipamento_id').value = '';
+    document.getElementById('equipamento_nome').value = '';
+    document.getElementById('local_instalacao_id').value = '';
+    document.getElementById('local_instalacao_nome').value = '';
+
+    resetFalhaSelect();
+    resetMroTrens();
+    refreshSearchableSelect(linhaSel);
+    refreshSearchableSelect(prioSel);
+    refreshSearchableSelect(sistemaSel);
+    refreshSearchableSelect(subsistemaSel);
+    refreshSearchableSelect(falhaSel);
+    refreshSearchableSelect(trechoSel);
+    refreshSearchableSelect(estacaoSel);
+    refreshSearchableSelect(serieSel);
+    refreshSearchableSelect(tremSel);
+    refreshSearchableSelect(carroSel);
+    refreshSearchableSelect(equipamentoAmvSel);
   }
 
-  function habilitarEtapaOQue() {
-    secOQue.classList.remove('step-locked');
+  async function carregarSeriesMro() {
+    resetMroTrens();
+    const res = await API.opcoesFormulario({ tipo: 'serie', linha: '36' });
+    if (!res.ok || !res.data.opcoes?.length) {
+      return;
+    }
+    serieSel.innerHTML = '<option value=""></option>' +
+      res.data.opcoes.map(item => `<option value="${escHtml(item.value)}">${escHtml(item.label)}</option>`).join('');
+    serieSel.disabled = false;
+    refreshSearchableSelect(serieSel);
   }
 
-  document.querySelectorAll('.tipo-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const tipo = btn.dataset.tipo || '';
+  async function carregarTrensMro() {
+    tremSel.innerHTML = '<option value=""></option>';
+    tremSel.disabled = true;
+    carroSel.innerHTML = '<option value=""></option>';
+    carroSel.disabled = true;
+    refreshSearchableSelect(tremSel);
+    refreshSearchableSelect(carroSel);
 
-      document.querySelectorAll('.tipo-btn').forEach(b => {
-        b.classList.toggle('selected', b === btn);
-      });
+    const serie = (serieSel.value || '').trim();
+    if (!serie) return;
 
-      _tipoSelecionado = tipo;
-      updateFluxoUi();
-      resetEtapaOQue();
-      resetManualMroState();
+    const res = await API.opcoesFormulario({ tipo: 'trem', serie, linha: '36' });
+    if (!res.ok || !res.data.opcoes?.length) {
+      return;
+    }
+    tremSel.innerHTML = '<option value=""></option>' +
+      res.data.opcoes.map(item => `<option value="${escHtml(item.value)}">${escHtml(item.label)}</option>`).join('');
+    tremSel.disabled = false;
+    refreshSearchableSelect(tremSel);
+  }
 
-      if (tipo === 'ESTACAO') {
-        await carregarLocaisEstacao();
-        resetEstacaoDropdowns();
-      }
+  async function carregarCarrosMro() {
+    carroSel.innerHTML = '<option value=""></option>';
+    carroSel.disabled = true;
+    refreshSearchableSelect(carroSel);
 
-      if (tipo === 'ESTACAO' || tipo === 'MRO' || tipo === 'VIA') {
-        habilitarEtapaOQue();
+    const serie = (serieSel.value || '').trim();
+    const trem = (tremSel.value || '').trim();
+    if (!serie || !trem) return;
+
+    const res = await API.opcoesFormulario({ tipo: 'carro', serie, trem, linha: '36' });
+    if (!res.ok || !res.data.opcoes?.length) {
+      return;
+    }
+
+    carroSel.innerHTML = '<option value=""></option>' +
+      res.data.opcoes.map(item => `<option value="${escHtml(item.value)}">${escHtml(item.label)}</option>`).join('');
+    carroSel.disabled = false;
+    refreshSearchableSelect(carroSel);
+  }
+
+  async function carregarSistemasPorTipo(tipo) {
+    sistemaSel.innerHTML = '<option value=""></option>';
+    sistemaSel.disabled = true;
+    sistemasCache = [];
+
+    const res = await API.sistemasPorTipo(tipo);
+    if (!res.ok || !res.data.sistemas?.length) {
+      sistemaSel.innerHTML = '<option value=""></option>';
+      refreshSearchableSelect(sistemaSel);
+      return;
+    }
+
+    sistemasCache = res.data.sistemas;
+    sistemaSel.innerHTML = '<option value=""></option>' + sistemasCache
+      .map(item => `<option value="${escHtml(item.id)}" data-codigo="${escHtml(item.codigo || '')}">${escHtml(item.label || item.nome || item.id)}</option>`)
+      .join('');
+    sistemaSel.disabled = false;
+    sistemaSel.value = '';
+    sistemaIdHidden.value = '';
+    refreshSearchableSelect(sistemaSel);
+  }
+
+  async function carregarSubsistemas() {
+    subsistemaSel.innerHTML = '<option value=""></option>';
+    subsistemaSel.disabled = true;
+    subsistemasCache = [];
+    resetFalhaSelect();
+
+    const sistemaId = (sistemaSel.value || '').trim();
+    if (!sistemaId) {
+      subsistemaSel.innerHTML = '<option value=""></option>';
+      refreshSearchableSelect(subsistemaSel);
+      return;
+    }
+
+    const res = await API.subsistemas(sistemaId);
+    if (!res.ok || !res.data.subsistemas?.length) {
+      subsistemaSel.innerHTML = '<option value=""></option>';
+      refreshSearchableSelect(subsistemaSel);
+      return;
+    }
+
+    subsistemasCache = res.data.subsistemas;
+    subsistemaSel.innerHTML = '<option value=""></option>' +
+      subsistemasCache.map(item => `<option value="${escHtml(item.id)}">${escHtml(item.nome || item.codigo || item.id)}</option>`).join('');
+    subsistemaSel.disabled = false;
+    refreshSearchableSelect(subsistemaSel);
+  }
+
+  async function carregarFalhasPorSistema() {
+    resetFalhaSelect();
+
+    const sistemaId = (sistemaSel.value || '').trim();
+    if (!sistemaId) return;
+
+    falhaSel.innerHTML = '<option value=""></option>';
+    falhaSel.disabled = true;
+
+    let res;
+    try {
+      if (API && typeof API.falhas === 'function') {
+        res = await API.falhas({ sistema_id: sistemaId });
       } else {
-        bloquearEtapaOQue();
-        Toast.info('Fluxo em configuracao. Por enquanto, use Estacao, MRO ou Via.');
+        res = await API.get(`/dados/falhas?sistema_id=${encodeURIComponent(sistemaId)}`);
+      }
+    } catch (_) {
+      res = { ok: false, data: {} };
+    }
+
+    if (!res.ok || !res.data.falhas?.length) {
+      falhaSel.innerHTML = '<option value=""></option>';
+      falhaSel.disabled = false;
+      refreshSearchableSelect(falhaSel);
+      return;
+    }
+
+    falhaSel.innerHTML = '<option value=""></option>' +
+      res.data.falhas.map(item => `<option value="${escHtml(item.id)}">${escHtml(item.label || item.descricao)}</option>`).join('');
+    falhaSel.disabled = false;
+    refreshSearchableSelect(falhaSel);
+  }
+
+  async function carregarLocalPorLinha() {
+    const linha = (linhaSel.value || '').trim();
+
+    trechoSel.innerHTML = '<option value=""></option>';
+    trechoSel.disabled = true;
+    estacaoSel.innerHTML = '<option value=""></option>';
+    estacaoSel.disabled = true;
+
+    if (!linha) return;
+
+    const [trechoRes, estacaoRes] = await Promise.all([
+      API.opcoesFormulario({ tipo: 'trecho', linha }),
+      API.estacoes(linha),
+    ]);
+
+    if (trechoRes.ok && trechoRes.data.opcoes?.length) {
+      trechoSel.innerHTML = '<option value=""></option>' +
+        trechoRes.data.opcoes.map(item => `<option value="${escHtml(item.value)}">${escHtml(item.label)}</option>`).join('');
+      trechoSel.disabled = false;
+    } else {
+      trechoSel.innerHTML = '<option value=""></option>';
+    }
+    refreshSearchableSelect(trechoSel);
+
+    if (estacaoRes.ok && estacaoRes.data.estacoes?.length) {
+      estacaoSel.innerHTML = '<option value=""></option>' +
+        estacaoRes.data.estacoes.map(item => {
+          const nome = String(item.estacao || '').trim();
+          const sigla = String(item.sigla || '').trim();
+          const label = sigla ? `${nome} (${sigla})` : nome;
+          return `<option value="${escHtml(item.id)}" data-nome="${escHtml(nome)}" data-sigla="${escHtml(sigla)}">${escHtml(label)}</option>`;
+        }).join('');
+      estacaoSel.disabled = false;
+    } else {
+      estacaoSel.innerHTML = '<option value=""></option>';
+    }
+    refreshSearchableSelect(estacaoSel);
+  }
+
+  function syncTabByTipo(tipo) {
+    document.querySelectorAll('.tipo-tab').forEach(btn => {
+      const isActive = btn.dataset.tipo === tipo;
+      btn.classList.toggle('selected', isActive);
+      btn.setAttribute('aria-selected', String(isActive));
+    });
+  }
+
+  function applyEstacaoSistemaCustomLayout() {
+    const sistemaId = (sistemaSel.value || '').trim();
+    const isEstacao = tipoSelecionado === 'ESTACAO';
+    const isVia = tipoSelecionado === 'VIA';
+    const isS258 = isEstacao && ['2', '5', '8'].includes(sistemaId);
+    const isS7 = isEstacao && sistemaId === '7';
+    const isSemSistema = isEstacao && !sistemaId;
+    const custom = isS258 || isS7 || isSemSistema || isVia;
+    const usarLayoutS258 = isS258 || isSemSistema;
+
+    if (custom) {
+      estacaoSistemaLayout.style.display = 'block';
+      estacaoSistemaLayout.classList.toggle('mode-s258', usarLayoutS258);
+      estacaoSistemaLayout.classList.toggle('mode-s7', isS7);
+      estacaoSistemaLayout.classList.toggle('mode-via', isVia);
+
+      if (sistemaWrap.parentElement !== estacaoRow1) estacaoRow1.appendChild(sistemaWrap);
+      if (subsistemaWrap.parentElement !== estacaoRow1) estacaoRow1.appendChild(subsistemaWrap);
+
+      if (isVia) {
+        if (falhaWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(falhaWrap);
+        if (prioridadeWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(prioridadeWrap);
+
+        if (linhaWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(linhaWrap);
+        if (viaWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(viaWrap);
+        if (kmInicialWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(kmInicialWrap);
+        if (kmFinalWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(kmFinalWrap);
+        if (topEstacaoWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(topEstacaoWrap);
+
+        if (trechoWrap.parentElement !== estacaoRow4) estacaoRow4.appendChild(trechoWrap);
+        if (equipamentoWrap.parentElement !== estacaoRow4) estacaoRow4.appendChild(equipamentoWrap);
+        equipamentoWrap.style.display = 'block';
+        estacaoRow4.style.display = 'grid';
+        trechoWrap.style.display = 'block';
+      } else {
+        if (falhaWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(falhaWrap);
+        if (prioridadeWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(prioridadeWrap);
+
+        if (linhaWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(linhaWrap);
+        if (topEstacaoWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(topEstacaoWrap);
+        if (equipamentoWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(equipamentoWrap);
+        equipamentoWrap.style.display = 'block';
+
+        if (isS7) {
+          estacaoRow4.style.display = 'grid';
+          if (trechoWrap.parentElement !== estacaoRow4) estacaoRow4.appendChild(trechoWrap);
+          trechoWrap.style.display = 'block';
+        } else {
+          estacaoRow4.style.display = 'none';
+          if (trechoWrap.parentElement !== estacaoRow4) estacaoRow4.appendChild(trechoWrap);
+          trechoWrap.style.display = 'none';
+        }
       }
 
-      checkFormValid();
-    });
-  });
+      topGrid.style.display = 'none';
+      prioSistemaGrid.style.display = 'none';
+      subsFalhaGrid.style.display = 'none';
+      trechoEquipGrid.style.display = 'none';
+      return;
+    }
 
-  // ── Validation ────────────────────────────────────
+    estacaoSistemaLayout.style.display = 'none';
+    estacaoSistemaLayout.classList.remove('mode-s258', 'mode-s7', 'mode-via');
+
+    if (linhaWrap.parentElement !== topGrid) topGrid.appendChild(linhaWrap);
+    if (topEstacaoWrap.parentElement !== topGrid) topGrid.appendChild(topEstacaoWrap);
+
+    if (prioridadeWrap.parentElement !== prioSistemaGrid) {
+      if (sistemaWrap.parentElement === prioSistemaGrid) {
+        prioSistemaGrid.insertBefore(prioridadeWrap, sistemaWrap);
+      } else {
+        prioSistemaGrid.appendChild(prioridadeWrap);
+      }
+    }
+    if (sistemaWrap.parentElement !== prioSistemaGrid) prioSistemaGrid.appendChild(sistemaWrap);
+
+    if (subsistemaWrap.parentElement !== subsFalhaGrid) {
+      if (falhaWrap.parentElement === subsFalhaGrid) {
+        subsFalhaGrid.insertBefore(subsistemaWrap, falhaWrap);
+      } else {
+        subsFalhaGrid.appendChild(subsistemaWrap);
+      }
+    }
+    if (falhaWrap.parentElement !== subsFalhaGrid) subsFalhaGrid.appendChild(falhaWrap);
+
+    if (trechoWrap.parentElement !== trechoEquipGrid) {
+      if (trechoEquipGrid.firstChild) {
+        trechoEquipGrid.insertBefore(trechoWrap, trechoEquipGrid.firstChild);
+      } else {
+        trechoEquipGrid.appendChild(trechoWrap);
+      }
+    }
+    if (equipamentoWrap.parentElement !== trechoEquipGrid) trechoEquipGrid.appendChild(equipamentoWrap);
+
+    topGrid.style.display = 'grid';
+    prioSistemaGrid.style.display = 'grid';
+    subsFalhaGrid.style.display = 'grid';
+    trechoEquipGrid.style.display = 'grid';
+  }
+
+  function atualizarLayoutPorTipo() {
+    const isEstacao = tipoSelecionado === 'ESTACAO';
+    const isMro = tipoSelecionado === 'MRO';
+    const isVia = tipoSelecionado === 'VIA';
+    const sistemaIdAtual = (sistemaSel.value || '').trim();
+    const isEstacaoCustom = isEstacao && (!sistemaIdAtual || ['2', '5', '7', '8'].includes(sistemaIdAtual));
+    topEstacaoWrap.style.display = isEstacao ? 'block' : 'none';
+    linhaWrap.style.display = isMro ? 'none' : 'block';
+    trechoWrap.style.display = isMro ? 'none' : 'block';
+    equipamentoWrap.style.display = isMro ? 'none' : 'block';
+    sistemaWrap.style.display = isMro ? 'none' : 'block';
+    if (tipoSelecionado !== 'VIA') {
+      equipamentoAmvWrap.style.display = 'none';
+      equipamentoAmvSel.value = '';
+      equipamentoAmvSel.disabled = true;
+      refreshSearchableSelect(equipamentoAmvSel);
+    }
+    viaKmGrid.style.display = 'none';
+    mroTrensGrid.style.display = isMro ? 'grid' : 'none';
+    topGrid.classList.toggle('top-estacao-on', isEstacao);
+    topGrid.classList.toggle('top-via-on', isVia);
+
+    if (isVia) {
+      if (viaWrap && viaWrap.parentElement !== topGrid) topGrid.appendChild(viaWrap);
+      if (kmInicialWrap && kmInicialWrap.parentElement !== topGrid) topGrid.appendChild(kmInicialWrap);
+      if (kmFinalWrap && kmFinalWrap.parentElement !== topGrid) topGrid.appendChild(kmFinalWrap);
+    } else if (viaKmGridOriginal) {
+      if (viaWrap && viaWrap.parentElement !== viaKmGridOriginal) viaKmGridOriginal.appendChild(viaWrap);
+      if (kmInicialWrap && kmInicialWrap.parentElement !== viaKmGridOriginal) viaKmGridOriginal.appendChild(kmInicialWrap);
+      if (kmFinalWrap && kmFinalWrap.parentElement !== viaKmGridOriginal) viaKmGridOriginal.appendChild(kmFinalWrap);
+    }
+    if (!isEstacao) {
+      estacaoSel.value = '';
+      document.getElementById('local_instalacao_id').value = '';
+      document.getElementById('local_instalacao_nome').value = '';
+    }
+
+    applyEstacaoSistemaCustomLayout();
+
+    if (isMro) {
+      if (prioridadeWrap && prioridadeWrap.parentElement !== topGrid) {
+        topGrid.appendChild(prioridadeWrap);
+      }
+      linhaSel.innerHTML = '<option value="36">Linha 36 - Trivia Trens</option>';
+      linhaSel.value = '36';
+      linhaSel.disabled = true;
+      trechoSel.value = '';
+      document.getElementById('equipamento_nome').value = '';
+      equipamentoCurtoInput.value = '';
+      sistemaSel.value = '1';
+      sistemaSel.disabled = true;
+      sistemaIdHidden.value = '1';
+      localInstalacaoIdHidden.value = '36';
+      localInstalacaoNomeHidden.value = 'Linha 36 - Trivia Trens';
+      refreshSearchableSelect(linhaSel);
+      refreshSearchableSelect(sistemaSel);
+    } else {
+      if (!isEstacaoCustom && prioridadeWrap && prioridadeGrid && prioridadeWrap.parentElement !== prioridadeGrid) {
+        if (sistemaWrap && sistemaWrap.parentElement === prioridadeGrid) {
+          prioridadeGrid.insertBefore(prioridadeWrap, sistemaWrap);
+        } else {
+          prioridadeGrid.appendChild(prioridadeWrap);
+        }
+      }
+      linhaSel.disabled = false;
+      linhaSel.innerHTML = linhaOptionsPadrao;
+      localInstalacaoIdHidden.value = '';
+      localInstalacaoNomeHidden.value = '';
+      resetMroTrens();
+      refreshSearchableSelect(linhaSel);
+    }
+
+    if (tipoSelecionado !== 'VIA') {
+      resetViaCampos();
+    }
+
+    checkFormValid();
+  }
+
+  async function setTipo(tipo) {
+    tipoSelecionado = tipo;
+    resetCamposFormulario();
+
+    const idsPermitidos = SISTEMAS_POR_TIPO[tipo] || [];
+    if (!idsPermitidos.length) {
+      sistemaSel.innerHTML = '<option value=""></option>';
+      sistemaSel.disabled = true;
+      sistemaIdHidden.value = '';
+      subsistemaIdHidden.value = '';
+      resetFalhaSelect();
+      checkFormValid();
+      return;
+    }
+
+    await carregarSistemasPorTipo(tipo);
+    sistemaIdHidden.value = '';
+    subsistemaIdHidden.value = '';
+
+    syncTabByTipo(tipo);
+    atualizarLayoutPorTipo();
+
+    if (tipo === 'MRO') {
+      sistemaSel.value = '1';
+      sistemaIdHidden.value = '1';
+    }
+
+    subsistemaSel.innerHTML = '<option value=""></option>';
+    subsistemaSel.disabled = true;
+    refreshSearchableSelect(subsistemaSel);
+    resetFalhaSelect();
+
+    await carregarLocalPorLinha();
+    await atualizarCampoEquipamentoPorSubsistema();
+
+    if (tipo === 'MRO') {
+      await carregarSubsistemas();
+      await carregarFalhasPorSistema();
+      await carregarSeriesMro();
+    } else {
+      resetMroTrens();
+    }
+
+    checkFormValid();
+  }
+
   function checkFormValid() {
-    const hasTipoValido = isFluxoHabilitado();
-    const hasSintoma = (document.getElementById('sintoma_id').value || '') !== '';
-    const hasDescItem2 = (document.getElementById('descricao_falha').value || '').trim().length >= 3;
-    const hasDescItem3 = (document.getElementById('descricao_item3').value || '').trim().length >= 3;
-    const hasDesc    = hasSintoma
-                     || hasDescItem2
-                     || hasDescItem3;
-    const hasDate    = document.getElementById('data_inicio_avaria').value !== ''
-                    && document.getElementById('hora_inicio_avaria').value !== '';
-    const hasPhoto   = !!window._capturedPhoto;
-    btnSubmit.disabled = !(hasTipoValido && hasDesc && hasDate && hasPhoto);
+    const descricao = (descricaoInput.value || '').trim();
+    const sistemaId = tipoSelecionado === 'MRO' ? '1' : (sistemaSel.value || '').trim();
+    const isMro = tipoSelecionado === 'MRO';
+    const isVia = tipoSelecionado === 'VIA';
+    const isEstacaoSisComTrechoOpcional = tipoSelecionado === 'ESTACAO' && ['2', '5', '7', '8'].includes(sistemaId);
+    const trechoObrigatorio = !isMro && !isEstacaoSisComTrechoOpcional;
+    const equipamentoObrigatorio = tipoSelecionado === 'ESTACAO' && ['2', '5', '7', '8'].includes(sistemaId);
+    const viaObrigatoria = isVia && ['3', '4', '6'].includes(sistemaId);
+    trechoRequiredEl.style.display = trechoObrigatorio ? 'inline' : 'none';
+    equipamentoRequiredEl.style.display = equipamentoObrigatorio ? 'inline' : 'none';
+    viaRequiredEl.style.display = viaObrigatoria ? 'inline' : 'none';
+    kmInicialRequiredEl.style.display = viaObrigatoria ? 'inline' : 'none';
+    kmFinalRequiredEl.style.display = viaObrigatoria ? 'inline' : 'none';
+    const estacaoObrigatoria = tipoSelecionado === 'ESTACAO';
+    const tremDataCompleta = !isMro || (
+      !!(serieSel.value || '').trim() &&
+      !!(tremSel.value || '').trim() &&
+      !!(carroSel.value || '').trim()
+    );
+    const formValido =
+      !!(linhaSel.value || '').trim() &&
+      !!(prioSel.value || '').trim() &&
+      !!sistemaId &&
+      !!(subsistemaSel.value || '').trim() &&
+      !!(falhaSel.value || '').trim() &&
+      (!trechoObrigatorio || !!(trechoSel.value || '').trim()) &&
+      (!equipamentoObrigatorio || !!(equipamentoCurtoInput.value || '').trim()) &&
+      (!viaObrigatoria || !!normalizeVia(viaInput.value)) &&
+      (!viaObrigatoria || isKmCompleto(kmInicialInput.value)) &&
+      (!viaObrigatoria || isKmCompleto(kmFinalInput.value)) &&
+      tremDataCompleta &&
+      (!estacaoObrigatoria || !!(estacaoSel.value || '').trim()) &&
+      descricao.length >= 3 &&
+      !!window._capturedPhoto;
+
+    document.getElementById('desc-error').style.display = descricao.length === 0 || descricao.length >= 3 ? 'none' : 'block';
+    btnSubmit.disabled = !formValido;
   }
 
-  ['data_inicio_avaria', 'hora_inicio_avaria'].forEach(id =>
-    document.getElementById(id).addEventListener('change', checkFormValid)
-  );
-
-  // ── Smart suggestion search ───────────────────────
-  function escHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  function limparTitulo(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim();
   }
 
-  function renderSugestoes(list) {
-    const listEl    = document.getElementById('suggest-list');
-    const emptyEl   = document.getElementById('suggest-empty');
-    const loadingEl = document.getElementById('suggest-loading');
-    loadingEl.style.display = 'none';
-    listEl.innerHTML = '';
-    if (!list.length) { emptyEl.style.display = 'block'; return; }
-    emptyEl.style.display = 'none';
-
-    list.forEach(s => {
-      const btn  = document.createElement('button');
-      btn.type   = 'button';
-      btn.style.cssText = [
-        'width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:.875rem;',
-        'border:1.5px solid var(--border);border-radius:var(--radius-lg);',
-        'background:var(--surface);padding:.75rem 1rem;transition:border-color .15s,background .15s;'
-      ].join('');
-      const icon = s.tipo === 'sintoma' ? '\uD83D\uDCA1' : (s.tipo === 'trem' ? '\uD83D\uDE86' : (s.tipo === 'via' ? '\uD83D\uDEE4\uFE0F' : '\uD83D\uDD27'));
-      btn.innerHTML = `
-        <span style="font-size:1.4rem;flex-shrink:0;">${icon}</span>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:.9rem;color:var(--text);">
-            ${escHtml(s.equip_nome || s.sintoma_nome || '')}
-          </div>
-          ${s.local_nome
-            ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:2px;">${_tipoSelecionado === 'MRO' ? 'S&eacute;rie: ' : '&#128205; '}${escHtml(s.local_nome)}</div>`
-            : ''}
-          ${(s.sintoma_nome && s.tipo !== 'sintoma')
-            ? `<div style="font-size:.78rem;color:var(--primary);margin-top:2px;font-weight:600;">Sintoma: ${escHtml(s.sintoma_nome)}</div>`
-            : ''}
-        </div>
-        <span style="color:var(--primary);font-size:1.1rem;flex-shrink:0;">&#8594;</span>
-      `;
-      btn.addEventListener('mouseenter', () => { btn.style.borderColor='var(--primary)'; btn.style.background='rgba(27,42,94,.04)'; });
-      btn.addEventListener('mouseleave', () => { btn.style.borderColor='var(--border)';  btn.style.background='var(--surface)'; });
-      btn.addEventListener('click', () => selecionarSugestao(s));
-      listEl.appendChild(btn);
-    });
+  function tokenCode(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9_\-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
   }
 
-  function selecionarSugestao(s) {
-    _sugestaoSel = s;
-    document.getElementById('local_instalacao_id').value   = s.local_id   || '';
-    document.getElementById('local_instalacao_nome').value = s.local_nome  || '';
-    document.getElementById('equipamento_id').value        = s.equip_id   || '';
-    document.getElementById('equipamento_nome').value      = s.equip_nome || s.sintoma_nome || '';
-    document.getElementById('sintoma_id').value            = s.sintoma_id || '';
-
-    document.getElementById('sel-equip').textContent = s.equip_nome || s.sintoma_nome || '';
-    document.getElementById('sel-local').textContent = s.local_nome ? `\uD83D\uDCCD ${s.local_nome}` : '';
-    const sinDiv = document.getElementById('sel-sintoma');
-    if (s.sintoma_nome && s.tipo !== 'sintoma') {
-      sinDiv.textContent = `\uD83D\uDCA1 ${s.sintoma_nome}`;
-      sinDiv.style.display = 'block';
-    } else { sinDiv.style.display = 'none'; }
-
-    document.getElementById('suggest-area').style.display  = 'none';
-    document.getElementById('selected-card').style.display = 'block';
-    document.getElementById('equip-error').style.display   = 'none';
-    checkFormValid();
+  function stripCompositeLocalPrefix(value) {
+    const norm = tokenCode(value);
+    const match = norm.match(/^TV\d+-\d+-[A-Z0-9_]+-(.+)$/);
+    return match ? String(match[1] || '').trim() : norm;
   }
 
-  function limparSelecao() {
-    _sugestaoSel = null;
-    document.getElementById('local_instalacao_id').value   = '';
-    document.getElementById('local_instalacao_nome').value = '';
-    document.getElementById('equipamento_id').value        = '';
-    document.getElementById('equipamento_nome').value      = '';
-    document.getElementById('sintoma_id').value            = '';
-    document.getElementById('selected-card').style.display = 'none';
-    const list = document.getElementById('suggest-list');
-    if (list.children.length) document.getElementById('suggest-area').style.display = 'block';
-    checkFormValid();
-  }
-  document.getElementById('btn-change-equip').addEventListener('click', limparSelecao);
+  function composeLocalInstalacaoCodigo() {
+    const linha = String(linhaSel.value || '').trim();
+    const sistemaId = String(tipoSelecionado === 'MRO' ? '1' : (sistemaSel.value || '')).trim();
+    const sistemaOption = sistemaSel.options[sistemaSel.selectedIndex] || null;
+    const sistemaCodigo = tokenCode(
+      (sistemaOption && sistemaOption.dataset && sistemaOption.dataset.codigo) ||
+      (sistemasCache.find(item => String(item.id) === sistemaId)?.codigo || '')
+    );
 
-  // ── Item 3: Civil / Elétrica (somente ESTACAO) ─────────────
-  document.getElementById('btn-falha-civil').addEventListener('click', function () {
-    this.classList.add('selected');
-    document.getElementById('btn-falha-eletrica').classList.remove('selected');
-    document.getElementById('falha-civil-wrap').style.display = 'block';
-    document.getElementById('falha-eletrica-wrap').style.display = 'none';
-    document.getElementById('falha-eletrica-sel').value = '';
-    updateEletricaNumeroRestriction();
-    document.getElementById('descricao_item3').value = '';
-    checkFormValid();
-  });
-
-  document.getElementById('btn-falha-eletrica').addEventListener('click', function () {
-    this.classList.add('selected');
-    document.getElementById('btn-falha-civil').classList.remove('selected');
-    document.getElementById('falha-eletrica-wrap').style.display = 'block';
-    document.getElementById('falha-civil-wrap').style.display = 'none';
-    document.getElementById('falha-civil-sel').value = '';
-    updateCivilNumeroRestriction();
-    updateEletricaNumeroRestriction();
-    document.getElementById('descricao_item3').value = '';
-    checkFormValid();
-  });
-
-  document.getElementById('falha-civil-sel').addEventListener('change', function () {
-      updateCivilNumeroRestriction();
-     checkFormValid();
-  });
-
-    document.getElementById('falha-civil-numero').addEventListener('change', function () {
-      checkFormValid();
-    });
-
-  document.getElementById('falha-eletrica-sel').addEventListener('change', function () {
-      updateEletricaNumeroRestriction();
-     checkFormValid();
-  });
-
-    document.getElementById('falha-eletrica-numero').addEventListener('change', function () {
-      checkFormValid();
-    });
-
-  estacaoLinhaSel.addEventListener('change', function () {
-    if (_tipoSelecionado !== 'ESTACAO') return;
-    const linha = (this.value || '').trim();
-    popularEstacoesPorLinha(linha);
-    estacaoLocalSel.value = '';
-    document.getElementById('descricao_falha').value = '';
-    document.getElementById('local_instalacao_id').value = '';
-    document.getElementById('local_instalacao_nome').value = '';
-    document.getElementById('equipamento_id').value = '';
-    document.getElementById('equipamento_nome').value = '';
-    document.getElementById('sintoma_id').value = '';
-    checkFormValid();
-  });
-
-  estacaoLocalSel.addEventListener('change', function () {
-    if (_tipoSelecionado !== 'ESTACAO') return;
-    const estacaoId = (this.value || '').trim();
-    const estacaoSel = estacaoId
-      ? (_estacoes.find(e => String(e.id) === String(estacaoId)) || null)
-      : null;
-
-    document.getElementById('local_instalacao_id').value = estacaoSel?.id || '';
-    document.getElementById('local_instalacao_nome').value = estacaoSel?.estacao || '';
-    document.getElementById('descricao_falha').value = estacaoSel?.estacao || '';
-    document.getElementById('equipamento_id').value = '';
-    document.getElementById('equipamento_nome').value = '';
-    document.getElementById('sintoma_id').value = '';
-
-    if (estacaoSel && manualLoaded) {
-      const manLocalSel = document.getElementById('man-local');
-      if (manLocalSel) {
-        const target = String(estacaoSel.estacao || '').trim().toLowerCase();
-        const matchOpt = Array.from(manLocalSel.options).find(opt =>
-          String(opt.text || '').trim().toLowerCase().includes(target)
-        );
-        if (matchOpt) manLocalSel.value = matchOpt.value;
-      }
-    }
-    checkFormValid();
-  });
-
-  // Debounced search as user types the description
-  document.getElementById('descricao_falha').addEventListener('input', function () {
-    checkFormValid();
-    if (!isFluxoHabilitado()) return;
-    if (_sugestaoSel) return; // already confirmed
-    clearTimeout(_suggestTimer);
-    const q = this.value.trim();
-    if (q.length < 3) {
-      document.getElementById('suggest-area').style.display = 'none';
-      return;
-    }
-    document.getElementById('suggest-loading').style.display = 'block';
-    document.getElementById('suggest-list').innerHTML = '';
-    document.getElementById('suggest-empty').style.display  = 'none';
-    document.getElementById('suggest-area').style.display   = 'block';
-    _suggestTimer = setTimeout(async () => {
-      const gps = window._gpsPosition;
-      const res = await API.sugerir(q, gps?.lat, gps?.lng, _tipoSelecionado);
-      if (res.ok && res.data.sugestoes) {
-        renderSugestoes(res.data.sugestoes);
-      } else {
-        document.getElementById('suggest-loading').style.display = 'none';
-        document.getElementById('suggest-empty').style.display   = 'block';
-      }
-    }, 480);
-  });
-
-  document.getElementById('descricao_item3').addEventListener('input', function () {
-    checkFormValid();
-  });
-
-  // ── Manual accordion ─────────────────────────────
-  let manualOpen   = false;
-  let manualLoaded = false;
-
-  document.getElementById('btn-toggle-manual').addEventListener('click', async function () {
-    if (!isFluxoHabilitado()) return;
-    manualOpen = !manualOpen;
-    document.getElementById('manual-section').style.display = manualOpen ? 'block' : 'none';
-    document.getElementById('manual-icon').style.transform  = manualOpen ? 'rotate(90deg)' : '';
-
-    if (manualOpen && !manualLoaded) {
-      manualLoaded = true;
-      const res = await API.locais(_tipoSelecionado);
-      const sel = document.getElementById('man-local');
-      if (_tipoSelecionado === 'VIA') {
-        setViaLineOptions();
-        manLinhaSelect.value = '';
-        document.getElementById('man-equip').innerHTML = '<option value="">Selecione a linha primeiro</option>';
-      } else if (res.ok && res.data.locais?.length) {
-        sel.innerHTML = `<option value="">${_tipoSelecionado === 'MRO' ? 'Selecione a s&eacute;rie' : 'Selecione o local'}</option>` +
-          res.data.locais.map(l =>
-            `<option value="${l.id}">${l.codigo ? escHtml(l.codigo) + ' \u2013 ' : ''}${escHtml(l.descricao)}</option>`
-          ).join('');
-      } else {
-        sel.innerHTML = '<option value="">Nenhum local dispon\xedvel</option>';
-      }
-    }
-  });
-
-  manLinhaSelect.addEventListener('change', async function () {
-    if (_tipoSelecionado !== 'VIA') return;
-    const linha = (this.value || '').trim();
-    const eqSel = document.getElementById('man-equip');
-    eqSel.innerHTML = '<option value="">Carregando...</option>';
-    eqSel.disabled = true;
-
-    document.getElementById('local_instalacao_id').value = '';
-    document.getElementById('local_instalacao_nome').value = '';
-    document.getElementById('equipamento_id').value = '';
-    document.getElementById('equipamento_nome').value = '';
-    document.getElementById('sintoma_id').value = '';
-
-    if (!linha) {
-      eqSel.innerHTML = '<option value="">Selecione a linha primeiro</option>';
-      checkFormValid();
-      return;
-    }
-
-    const res = await API.equipamentos(linha, 'VIA');
-    if (res.ok && res.data.equipamentos?.length) {
-      eqSel.innerHTML = '<option value="">Selecione o trecho</option>' +
-        res.data.equipamentos.map(e =>
-          `<option value="${e.id}">${escHtml(e.descricao)}</option>`
-        ).join('');
-      eqSel.disabled = false;
+    let localSuffix = '';
+    if (tipoSelecionado === 'ESTACAO') {
+      const estOpt = estacaoSel.options[estacaoSel.selectedIndex] || null;
+      const sigla = tokenCode(estOpt ? (estOpt.dataset.sigla || '') : '');
+      const nome = tokenCode(estOpt ? (estOpt.dataset.nome || estOpt.textContent || '') : '');
+      localSuffix = `EST-${sigla || nome}`;
     } else {
-      eqSel.innerHTML = '<option value="">Nenhum trecho encontrado</option>';
-    }
-    checkFormValid();
-  });
-
-  document.getElementById('man-local').addEventListener('change', async function () {
-    const lid    = this.value;
-    const eqSel  = document.getElementById('man-equip');
-    const sinSel = document.getElementById('man-sintoma');
-    eqSel.innerHTML   = '<option value="">Carregando...</option>';
-    eqSel.disabled    = true;
-    sinSel.innerHTML  = _tipoSelecionado === 'MRO'
-      ? '<option value="">N&atilde;o aplic&aacute;vel para MRO</option>'
-      : _tipoSelecionado === 'VIA'
-      ? '<option value="">N&atilde;o aplic&aacute;vel para Via</option>'
-      : '<option value="">Selecione o equipamento primeiro</option>';
-    sinSel.disabled   = true;
-    _sugestaoSel      = null;
-    document.getElementById('selected-card').style.display = 'none';
-    document.getElementById('local_instalacao_id').value   = lid;
-    document.getElementById('local_instalacao_nome').value = lid ? this.options[this.selectedIndex].text : '';
-    document.getElementById('equipamento_id').value        = '';
-    document.getElementById('equipamento_nome').value      = '';
-    document.getElementById('sintoma_id').value            = '';
-    if (!lid) {
-      eqSel.innerHTML = `<option value="">${_tipoSelecionado === 'MRO' ? 'Selecione a s&eacute;rie primeiro' : 'Selecione o local primeiro'}</option>`;
-      checkFormValid();
-      return;
-    }
-    const res = await API.equipamentos(lid, _tipoSelecionado);
-    if (res.ok && res.data.equipamentos?.length) {
-      eqSel.innerHTML = `<option value="">${_tipoSelecionado === 'MRO' ? 'Selecione o prefixo' : 'Selecione o equipamento'}</option>` +
-        res.data.equipamentos.map(e =>
-          `<option value="${e.id}">${e.codigo ? escHtml(e.codigo) + ' \u2013 ' : ''}${escHtml(e.descricao)}</option>`
-        ).join('');
-      eqSel.disabled = false;
-    } else {
-      eqSel.innerHTML = '<option value="">Nenhum equipamento encontrado</option>';
-    }
-    checkFormValid();
-  });
-
-  document.getElementById('man-equip').addEventListener('change', async function () {
-    const eid    = this.value;
-    const sinSel = document.getElementById('man-sintoma');
-    document.getElementById('equipamento_id').value   = eid;
-    document.getElementById('equipamento_nome').value = eid ? this.options[this.selectedIndex].text : '';
-    _sugestaoSel = null;
-    document.getElementById('selected-card').style.display = 'none';
-
-    if (_tipoSelecionado === 'MRO' || _tipoSelecionado === 'VIA') {
-      sinSel.innerHTML = '<option value="">N&atilde;o aplic&aacute;vel para MRO</option>';
-      if (_tipoSelecionado === 'VIA') {
-        sinSel.innerHTML = '<option value="">N&atilde;o aplic&aacute;vel para Via</option>';
-        const linha = (manLinhaSelect.value || '').trim();
-        const trechoTxt = eid ? this.options[this.selectedIndex].text : '';
-        const km = viaKmSel.value;
-        const poste = viaPosteSel.value;
-        document.getElementById('local_instalacao_id').value = eid || '';
-        document.getElementById('local_instalacao_nome').value = trechoTxt ? `Linha ${linha} - ${trechoTxt}` : '';
-        document.getElementById('equipamento_id').value = eid || '';
-        document.getElementById('equipamento_nome').value = trechoTxt ? `${trechoTxt}${km ? ` | KM ${km}` : ''}${poste ? ` | Poste ${poste}` : ''}` : '';
-      }
-      sinSel.disabled = true;
-      document.getElementById('sintoma_id').value = '';
-      checkFormValid();
-      return;
+      const trechoCodigo = stripCompositeLocalPrefix(trechoSel.value || '');
+      localSuffix = trechoCodigo || stripCompositeLocalPrefix(trechoSel.options[trechoSel.selectedIndex]?.textContent || '');
     }
 
-    sinSel.innerHTML = '<option value="">Carregando...</option>';
-    sinSel.disabled  = true;
-    if (!eid) { sinSel.innerHTML = '<option value="">Selecione o equipamento primeiro</option>'; checkFormValid(); return; }
-    const res = await API.sintomas(eid);
-    if (res.ok && res.data.sintomas?.length) {
-      sinSel.innerHTML = '<option value="">Sintoma / Dano (opcional)</option>' +
-        res.data.sintomas.map(s =>
-          `<option value="${s.id}">${s.codigo ? escHtml(s.codigo) + ' \u2013 ' : ''}${escHtml(s.descricao)}</option>`
-        ).join('');
-      sinSel.disabled = false;
-    } else {
-      sinSel.innerHTML = '<option value="">Nenhum sintoma encontrado</option>';
-      sinSel.disabled  = false;
-    }
-    checkFormValid();
-  });
+    const parts = [
+      `TV${linha}`,
+      sistemaId,
+      sistemaCodigo,
+      localSuffix,
+    ].filter(Boolean);
 
-  document.getElementById('man-sintoma').addEventListener('change', function () {
-    document.getElementById('sintoma_id').value = this.value;
-    checkFormValid();
-  });
+    return parts.length ? parts.join('-') : '';
+  }
 
-  [viaKmSel, viaPosteSel].forEach(sel => {
-    sel.addEventListener('change', function () {
-      if (_tipoSelecionado !== 'VIA') return;
-      const eid = document.getElementById('equipamento_id').value;
-      if (!eid) return;
-      const trechoTxt = document.getElementById('man-equip').options[document.getElementById('man-equip').selectedIndex]?.text || '';
-      const km = viaKmSel.value;
-      const poste = viaPosteSel.value;
-      document.getElementById('equipamento_nome').value = trechoTxt
-        ? `${trechoTxt}${km ? ` | KM ${km}` : ''}${poste ? ` | Poste ${poste}` : ''}`
-        : '';
-    });
-  });
-
-  // ── Camera ────────────────────────────────────────
   async function openCamera() {
     const overlay = document.getElementById('camera-overlay');
-    const video   = document.getElementById('cam-video');
     overlay.style.display = 'flex';
     try {
       _camStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false
+        audio: false,
       });
     } catch (_err) {
       try {
         _camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       } catch (_err2) {
         overlay.style.display = 'none';
-        Toast.error('C\xe2mera n\xe3o dispon\xedvel. Verifique as permiss\xf5es do navegador.');
+        Toast.error('Camera nao disponivel. Verifique as permissoes do navegador.');
         return;
       }
     }
@@ -1260,15 +1353,19 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   function closeCamera() {
     document.getElementById('camera-overlay').style.display = 'none';
-    if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+    if (_camStream) {
+      _camStream.getTracks().forEach(track => track.stop());
+      _camStream = null;
+    }
     document.getElementById('cam-video').srcObject = null;
   }
 
   async function capturePhoto() {
-    const video  = document.getElementById('cam-video');
+    const video = document.getElementById('cam-video');
     const canvas = document.getElementById('cam-canvas');
-    canvas.width  = video.videoWidth  || 1280;
+    canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
+
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
@@ -1278,35 +1375,15 @@ document.addEventListener('DOMContentLoaded', async function () {
       gps = {
         lat: pos.coords.latitude.toFixed(6),
         lng: pos.coords.longitude.toFixed(6),
-        acc: Math.round(pos.coords.accuracy)
+        acc: Math.round(pos.coords.accuracy),
       };
-    } catch (_) { /* GPS opcional */ }
-
-    // Gravar coordenadas GPS na imagem (centro-inferior)
-    if (gps) {
-      const text = `Lat ${gps.lat}, Lng ${gps.lng}  (\xb1${gps.acc}m)`;
-      const fontSize = Math.max(18, Math.round(canvas.width * 0.022));
-      ctx.save();
-      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const textW  = ctx.measureText(text).width;
-      const padX   = fontSize * 0.7;
-      const padY   = fontSize * 0.5;
-      const bgW    = textW + padX * 2;
-      const bgH    = fontSize + padY * 2;
-      const bgX    = (canvas.width - bgW) / 2;
-      const bgY    = canvas.height - bgH - Math.round(canvas.height * 0.025);
-      ctx.fillStyle = 'rgba(0,0,0,0.60)';
-      ctx.fillRect(bgX, bgY, bgW, bgH);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(text, canvas.width / 2, bgY + bgH / 2);
-      ctx.restore();
+    } catch (_) {
+      // GPS opcional
     }
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-
     window._capturedPhoto = { dataUrl, gps };
+
     document.getElementById('foto_lat').value = gps ? gps.lat : '';
     document.getElementById('foto_lng').value = gps ? gps.lng : '';
     document.getElementById('foto_acc').value = gps ? gps.acc : '';
@@ -1315,172 +1392,244 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('cam-no-photo').classList.add('hidden');
     document.getElementById('cam-photo-result').classList.remove('hidden');
 
-    const geoStatus = document.getElementById('geo-status');
-    const geoError  = document.getElementById('geo-error');
+    const geoError = document.getElementById('geo-error');
+    const btnMapa = document.getElementById('btn-ver-mapa');
+
     if (gps) {
-      geoStatus.style.display = 'none';
-      geoError.style.display  = 'none';
-      const btnMapa = document.getElementById('btn-ver-mapa');
-      if (btnMapa) { btnMapa.href = `https://www.google.com/maps?q=${gps.lat},${gps.lng}&z=17`; btnMapa.style.display = 'inline-flex'; }
+      geoError.style.display = 'none';
+      btnMapa.href = `https://www.google.com/maps?q=${gps.lat},${gps.lng}&z=17`;
+      btnMapa.style.display = 'inline-flex';
     } else {
-      geoStatus.style.display = 'none';
-      geoError.style.display  = 'block';
+      geoError.style.display = 'block';
+      btnMapa.style.display = 'none';
+      btnMapa.href = '#';
     }
+
     closeCamera();
     checkFormValid();
   }
 
-  document.getElementById('btn-open-camera').addEventListener('click', openCamera);
-  document.getElementById('btn-close-cam').addEventListener('click',  closeCamera);
-  document.getElementById('btn-capture').addEventListener('click',     capturePhoto);
-  document.getElementById('btn-retake').addEventListener('click', function () {
-    window._capturedPhoto = null;
-    ['foto_lat','foto_lng','foto_acc'].forEach(id => document.getElementById(id).value = '');
-      const bm = document.getElementById('btn-ver-mapa'); if (bm) { bm.style.display = 'none'; bm.href = '#'; }
-    document.getElementById('cam-no-photo').classList.remove('hidden');
-    document.getElementById('cam-photo-result').classList.add('hidden');
+  document.querySelectorAll('.tipo-tab').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tipo = btn.dataset.tipo || 'ESTACAO';
+      await setTipo(tipo);
+    });
+  });
+
+  sistemaSel.addEventListener('change', async function () {
+    const sistemaId = (this.value || '').trim();
+    sistemaIdHidden.value = sistemaId;
+    subsistemaIdHidden.value = '';
+    await carregarSubsistemas();
+    await carregarFalhasPorSistema();
     checkFormValid();
   });
 
-  // ── Submit ────────────────────────────────────────
-  document.getElementById('form-novasaf').addEventListener('submit', async function (e) {
-    e.preventDefault();
+  linhaSel.addEventListener('change', async function () {
+    await carregarLocalPorLinha();
+    checkFormValid();
+  });
 
-    if (!isFluxoHabilitado()) {
-      Toast.warning('Selecione Estacao, MRO ou Via na etapa 1 para continuar.');
+  prioSel.addEventListener('change', function () {
+    prioridadeHidden.value = (this.value || '').trim();
+    checkFormValid();
+  });
+
+  subsistemaSel.addEventListener('change', async function () {
+    const subsistemaId = (this.value || '').trim();
+    subsistemaIdHidden.value = subsistemaId;
+    await carregarFalhasPorSistema();
+    await atualizarCampoEquipamentoPorSubsistema();
+    checkFormValid();
+  });
+
+  serieSel.addEventListener('change', async function () {
+    await carregarTrensMro();
+    checkFormValid();
+  });
+
+  tremSel.addEventListener('change', async function () {
+    await carregarCarrosMro();
+    checkFormValid();
+  });
+
+  carroSel.addEventListener('change', checkFormValid);
+
+  falhaSel.addEventListener('change', function () {
+    const selectedOption = falhaSel.options[falhaSel.selectedIndex] || null;
+    document.getElementById('sintoma_id').value = (falhaSel.value || '').trim();
+    document.getElementById('equipamento_nome').value = selectedOption ? selectedOption.textContent.trim() : '';
+    checkFormValid();
+  });
+
+  trechoSel.addEventListener('change', function () {
+    const selectedOption = trechoSel.options[trechoSel.selectedIndex] || null;
+    if (tipoSelecionado === 'VIA') {
+      localInstalacaoIdHidden.value = (trechoSel.value || '').trim();
+      localInstalacaoNomeHidden.value = selectedOption ? (selectedOption.textContent || '').trim() : '';
+    }
+    checkFormValid();
+  });
+
+  estacaoSel.addEventListener('change', function () {
+    const selectedOption = estacaoSel.options[estacaoSel.selectedIndex] || null;
+    document.getElementById('local_instalacao_id').value = (estacaoSel.value || '').trim();
+    document.getElementById('local_instalacao_nome').value = selectedOption ? (selectedOption.dataset.nome || selectedOption.textContent || '').trim() : '';
+    checkFormValid();
+  });
+
+  descricaoInput.addEventListener('input', checkFormValid);
+  equipamentoCurtoInput.addEventListener('input', function () {
+    this.value = String(this.value || '').slice(0, 12);
+    document.getElementById('equipamento_nome').value = this.value.trim();
+    checkFormValid();
+  });
+
+  equipamentoAmvSel.addEventListener('change', function () {
+    const selectedOption = equipamentoAmvSel.options[equipamentoAmvSel.selectedIndex] || null;
+    document.getElementById('equipamento_nome').value = selectedOption ? (selectedOption.textContent || '').trim() : '';
+    checkFormValid();
+  });
+
+  viaInput.addEventListener('input', function () {
+    this.value = normalizeVia(this.value);
+    viaNumeroHidden.value = this.value;
+    checkFormValid();
+  });
+
+  kmInicialInput.addEventListener('input', function () {
+    this.value = formatKmInput(this.value);
+    kmInicialHidden.value = this.value;
+    checkFormValid();
+  });
+
+  kmFinalInput.addEventListener('input', function () {
+    this.value = formatKmInput(this.value);
+    kmFinalHidden.value = this.value;
+    checkFormValid();
+  });
+
+  document.getElementById('btn-open-camera').addEventListener('click', openCamera);
+  document.getElementById('btn-close-cam').addEventListener('click', closeCamera);
+  document.getElementById('btn-capture').addEventListener('click', capturePhoto);
+  document.getElementById('btn-retake').addEventListener('click', function () {
+    window._capturedPhoto = null;
+    ['foto_lat', 'foto_lng', 'foto_acc'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('cam-no-photo').classList.remove('hidden');
+    document.getElementById('cam-photo-result').classList.add('hidden');
+    document.getElementById('btn-ver-mapa').style.display = 'none';
+    document.getElementById('btn-ver-mapa').href = '#';
+    checkFormValid();
+  });
+
+  document.getElementById('form-novasaf').addEventListener('submit', async function (event) {
+    event.preventDefault();
+
+    if (btnSubmit.disabled) {
+      Toast.warning('Preencha todos os campos obrigatorios para enviar.');
       return;
     }
 
-    const descricao  = (document.getElementById('descricao_falha').value || '').trim();
-    const descricaoItem3 = (document.getElementById('descricao_item3').value || '').trim();
-    const houveOcorrencia = !!document.getElementById('ocorrencia_cliente')?.checked;
-    const descricaoOcorrencia = houveOcorrencia
-      ? (document.getElementById('descricao_ocorrencia').value || '').trim()
-      : '';
+    const subsistemaNome = (subsistemaSel.options[subsistemaSel.selectedIndex]?.textContent || '').trim();
+    const falhaNome = (falhaSel.options[falhaSel.selectedIndex]?.textContent || '').trim();
+    const trechoNome = (trechoSel.options[trechoSel.selectedIndex]?.textContent || '').trim();
+    const estacaoNome = (estacaoSel.options[estacaoSel.selectedIndex]?.textContent || '').trim();
+    const serieMro = (serieSel.options[serieSel.selectedIndex]?.textContent || '').trim();
+    const tremMro = (tremSel.options[tremSel.selectedIndex]?.textContent || '').trim();
+    const carroMro = (carroSel.options[carroSel.selectedIndex]?.textContent || '').trim();
+    const viaNumero = normalizeVia(viaInput.value);
+    const kmInicial = (kmInicialInput.value || '').trim();
+    const kmFinal = (kmFinalInput.value || '').trim();
+    const descricao = (descricaoInput.value || '').trim();
+    const equipamentoCurto = (equipamentoCurtoInput.value || '').trim();
+    const equipamentoAmv = (equipamentoAmvSel.options[equipamentoAmvSel.selectedIndex]?.textContent || '').trim();
+
     const descricaoLonga = [
-      descricao,
-      descricaoItem3 ? `Detalhamento adicional: ${descricaoItem3}` : '',
-      descricaoOcorrencia ? `Ocorrência com cliente: ${descricaoOcorrencia}` : ''
+      `Data/Hora da avaria: ${avariaDataHoraTexto}`,
+      `Linha: ${linhaSel.value}`,
+      `Sistema: ${tipoSelecionado}`,
+      `Subsistema: ${subsistemaNome}`,
+      `Falha: ${falhaNome}`,
+      `Trecho: ${trechoNome}`,
+      viaNumero ? `Via: ${viaNumero}` : '',
+      kmInicial ? `KM Inicial: ${kmInicial}` : '',
+      kmFinal ? `KM Final: ${kmFinal}` : '',
+      `Estacao: ${estacaoNome}`,
+      serieMro ? `Serie: ${serieMro}` : '',
+      tremMro ? `Trem: ${tremMro}` : '',
+      carroMro ? `Carro: ${carroMro}` : '',
+      (equipamentoCurto || equipamentoAmv) ? `Equipamento: ${equipamentoCurto || equipamentoAmv}` : '',
+      `Descricao: ${descricao}`,
     ].filter(Boolean).join('\n\n');
-    const equipId    = document.getElementById('equipamento_id').value;
-    const prio       = 'ALTA';
-    prioHidden.value = 'ALTA';
-    const hasSintoma = (document.getElementById('sintoma_id').value || '') !== '';
 
-    if (!descricao && !descricaoItem3 && !hasSintoma) {
-      document.getElementById('desc-error').style.display = 'block';
-      Toast.warning('Descreva o problema (item 2 ou item 3) ou selecione um sintoma.');
-      return;
-    }
-    document.getElementById('desc-error').style.display = 'none';
-    document.getElementById('equip-error').style.display = 'none';
-    if (!window._capturedPhoto) {
-      Toast.warning('Tire uma foto do equipamento antes de enviar.');
-      document.getElementById('btn-open-camera').focus();
-      return;
-    }
+    const equipamentoMro = [serieMro, tremMro, carroMro].filter(Boolean).join(' / ');
 
-    // Auto-generate titulo_falha (max 40 chars)
-    let titulo = '';
-    const normalizeLabel = (txt) => String(txt || '').replace(/\s+\u2013\s+.*/, '').trim();
-
-    if (_tipoSelecionado === 'MRO') {
-      const localSel = document.getElementById('man-local');
-      const equipSel = document.getElementById('man-equip');
-      const serie = normalizeLabel(
-        _sugestaoSel?.local_nome
-        || localSel?.options?.[localSel.selectedIndex]?.text
-        || ''
-      );
-      const prefixo = normalizeLabel(
-        _sugestaoSel?.equip_nome
-        || equipSel?.options?.[equipSel.selectedIndex]?.text
-        || ''
-      );
-      if (serie || prefixo) {
-        titulo = `${serie}${serie && prefixo ? ' - ' : ''}${prefixo}`.substring(0, 40);
-      }
-    } else if (_tipoSelecionado === 'VIA') {
-      const equipSel = document.getElementById('man-equip');
-      const trechoFalha = normalizeLabel(
-        _sugestaoSel?.equip_nome
-        || equipSel?.options?.[equipSel.selectedIndex]?.text
-        || ''
-      );
-      if (trechoFalha) titulo = trechoFalha.substring(0, 40);
-    } else if (_tipoSelecionado === 'ESTACAO') {
-      const estacaoId  = document.getElementById('local_instalacao_id').value || '';
-      const estacaoObj = _estacoes.find(e => String(e.id) === String(estacaoId)) || null;
-      const linhaRaw = String(estacaoObj?.linha || estacaoLinhaSel.value || '').trim();
-      const linha  = linhaRaw ? `L${linhaRaw}` : '';
-      const sigla  = String(estacaoObj?.sigla  || '').trim();
-      const btnCivilSel    = document.getElementById('btn-falha-civil').classList.contains('selected');
-      const btnEletricaSel = document.getElementById('btn-falha-eletrica').classList.contains('selected');
-      const falhaSel = btnCivilSel
-        ? (document.getElementById('falha-civil-sel').value || '')
-        : btnEletricaSel
-          ? (document.getElementById('falha-eletrica-sel').value || '')
-          : '';
-      const numeroSel = btnCivilSel
-        ? (document.getElementById('falha-civil-numero').value || '')
-        : btnEletricaSel
-          ? (document.getElementById('falha-eletrica-numero').value || '')
-          : '';
-      const tituloPartes = [linha, sigla, falhaSel, numeroSel].filter(Boolean);
-      if (tituloPartes.length) titulo = tituloPartes.join('-');
-    } else if (_sugestaoSel) {
-      const parts = [_sugestaoSel.sintoma_nome, _sugestaoSel.equip_nome].filter(Boolean);
-      titulo = parts.join(' \u2014 ').substring(0, 40);
-    }
-    if (!titulo) titulo = descricao.substring(0, 40);
-    // Fallback: use sintoma or equipamento name from manual selectors
-    if (!titulo) {
-      const sinSel   = document.getElementById('man-sintoma');
-      const equipSel = document.getElementById('man-equip');
-      const sinTxt   = sinSel?.options[sinSel?.selectedIndex]?.text  || '';
-      const eqTxt    = equipSel?.options[equipSel?.selectedIndex]?.text || '';
-      const parts    = [sinTxt, eqTxt].filter(s => s
-        && s !== 'Selecione o equipamento'
-        && s !== 'Selecione o local primeiro'
-        && s !== 'Selecione o equipamento primeiro'
-        && s !== 'N\u00e3o aplic\u00e1vel para MRO'
-        && s !== 'N\u00e3o aplic\u00e1vel para Via');
-      titulo = parts[0]?.substring(0, 40) || 'Falha reportada';
-    }
+    const titulo = limparTitulo(falhaNome || descricao).substring(0, 40) || 'Falha reportada';
     document.getElementById('titulo_falha').value = titulo;
 
-    setLoading(btnSubmit, true, 'Enviando...');
+    const localInstalacaoId =
+      tipoSelecionado === 'VIA'
+        ? ((trechoSel.value || '').trim() || localInstalacaoIdHidden.value || null)
+        : (localInstalacaoIdHidden.value || null);
+    const localInstalacaoCodigo = composeLocalInstalacaoCodigo();
+    const localInstalacaoNome =
+      tipoSelecionado === 'VIA'
+        ? ((trechoSel.options[trechoSel.selectedIndex]?.textContent || '').trim() || localInstalacaoNomeHidden.value || '')
+        : (localInstalacaoNomeHidden.value || '');
 
     const payload = {
-      notificador_id:       user.id,
-      notificador_nome:     user.nome  || '',
-      notificador_area:     user.area  || '',
-      titulo_falha:         titulo,
-      descricao_longa:      descricaoLonga || descricao,
-      local_instalacao_id:  document.getElementById('local_instalacao_id').value   || null,
-      local_instalacao:     document.getElementById('local_instalacao_nome').value || '',
-      equipamento_id:       equipId || null,
-      equipamento:          document.getElementById('equipamento_nome').value      || '',
-      sintoma_id:           document.getElementById('sintoma_id').value            || null,
-      prioridade:           prio,
-      data_inicio_avaria:   document.getElementById('data_inicio_avaria').value,
-      hora_inicio_avaria:   document.getElementById('hora_inicio_avaria').value,
-      foto_base64:          window._capturedPhoto.dataUrl,
-      foto_lat:             document.getElementById('foto_lat').value || null,
-      foto_lng:             document.getElementById('foto_lng').value || null,
-      foto_acc:             document.getElementById('foto_acc').value || null,
+      notificador_id: user.id,
+      notificador_nome: user.nome || '',
+      notificador_area: user.area || '',
+      titulo_falha: titulo,
+      descricao_longa: descricaoLonga,
+      local_instalacao_id: localInstalacaoId,
+      local_instalacao: localInstalacaoCodigo || localInstalacaoNome,
+      equipamento_id: document.getElementById('equipamento_id').value || null,
+      equipamento: equipamentoAmv || equipamentoCurto || equipamentoMro || document.getElementById('equipamento_nome').value || '',
+      sintoma_id: document.getElementById('sintoma_id').value || null,
+      sistema_id: sistemaIdHidden.value || (tipoSelecionado === 'MRO' ? '1' : null),
+      subsistema_id: subsistemaIdHidden.value || null,
+      prioridade: prioridadeHidden.value || 'ALTA',
+      via_numero: viaNumero || null,
+      km_inicial: kmInicial || null,
+      km_final: kmFinal || null,
+      data_inicio_avaria: dataInicioHidden.value,
+      hora_inicio_avaria: horaInicioHidden.value,
+      foto_base64: window._capturedPhoto.dataUrl,
+      foto_lat: document.getElementById('foto_lat').value || null,
+      foto_lng: document.getElementById('foto_lng').value || null,
+      foto_acc: document.getElementById('foto_acc').value || null,
     };
 
+    setLoading(btnSubmit, true, 'Enviando...');
     const res = await API.criarSaf(payload);
-    setLoading(btnSubmit, false, 'Enviar Solicita\xe7\xe3o');
+    setLoading(btnSubmit, false, 'Enviar Solicitacao');
 
     if (res.ok) {
-      Toast.success(`${res.data.ticket || 'SAF'} criada com sucesso! Aguarde an\xe1lise do CCM.`);
-      setTimeout(() => window.location.href = '/minhassafs', 1800);
-    } else {
-      Toast.error(res.data.erro || 'Erro ao criar SAF. Tente novamente.');
+      Toast.success(`${res.data.ticket || 'SAF'} criada com sucesso!`);
+      setTimeout(() => {
+        window.location.href = '/minhassafs';
+      }, 1500);
+      return;
+    }
+
+    Toast.error(res.data.erro || 'Erro ao criar SAF. Tente novamente.');
+  });
+
+  setNowReadOnlyDateTime();
+  searchableSelects.forEach(initSearchableSelect);
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.searchable-select')) {
+      closeAllSearchableMenus();
     }
   });
+  prioridadeHidden.value = prioSel.value || 'ALTA';
+  await setTipo('ESTACAO');
+  await carregarLocalPorLinha();
+  await atualizarCampoEquipamentoPorSubsistema();
+  atualizarLayoutPorTipo();
+  checkFormValid();
 });
 </script>
 {% endblock %}

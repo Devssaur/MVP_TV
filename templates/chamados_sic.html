@@ -164,6 +164,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       const integ = s.saf_integracao_sap || {};
       const st = getStatus(s);
       const nota = integ.qmnum ? `${integ.tipo_nota || ''} ${integ.qmnum}`.trim() : '-';
+      const ordem = (integ.aufnr || integ.numero_ordem_sap || '-');
       return [
         s.ticket_saf ? `SAF #${String(s.ticket_saf).padStart(6, '0')}` : '-',
         Fmt.statusLabel(st),
@@ -173,13 +174,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         s.notificador_nome || '-',
         Fmt.prioLabel(s.prioridade || 'MEDIA'),
         nota,
+        ordem,
         Fmt.date(s.criado_em),
       ];
     });
 
     doc.autoTable({
       startY: 78,
-      head: [['Ticket', 'Status', 'Titulo', 'Equipamento', 'Local', 'Notificador', 'Prioridade', 'Nota SAP', 'Criado em']],
+      head: [['Ticket', 'Status', 'Titulo', 'Equipamento', 'Local', 'Notificador', 'Prioridade', 'Nota', 'Ordem', 'Criado em']],
       body,
       styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
       headStyles: { fillColor: [30, 58, 95] },
@@ -245,6 +247,9 @@ document.addEventListener('DOMContentLoaded', async function () {
       const nota = integ.qmnum
         ? `<span class="font-mono" style="font-size:.8rem;">${integ.tipo_nota || ''} ${integ.qmnum}</span>`
         : '<span class="text-muted">-</span>';
+      const ordem = (integ.aufnr || integ.numero_ordem_sap)
+        ? `<span class="font-mono" style="font-size:.8rem;">${integ.aufnr || integ.numero_ordem_sap}</span>`
+        : '<span class="text-muted">-</span>';
       return `
         <tr class="clickable" onclick="window.location.href='/saf/${s.id}'">
           <td>${Fmt.ticket(s.ticket_saf)}</td>
@@ -255,6 +260,7 @@ document.addEventListener('DOMContentLoaded', async function () {
           <td>${s.notificador_nome || '-'}</td>
           <td>${Fmt.prioBadge(s.prioridade || 'MEDIA')}</td>
           <td>${nota}</td>
+          <td>${ordem}</td>
           <td class="text-muted text-sm">${Fmt.date(s.criado_em)}</td>
         </tr>`;
     }).join('');
@@ -270,7 +276,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             <th>Local</th>
             <th>Notificador</th>
             <th>Prioridade</th>
-            <th>Nota SAP</th>
+            <th>Nota</th>
+            <th>Ordem</th>
             <th>Criado em</th>
           </tr>
         </thead>
