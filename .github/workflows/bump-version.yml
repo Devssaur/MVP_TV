@@ -1,33 +1,29 @@
-name: Bump App Version
+name: Validate App Version
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
+    paths:
+      - VERSION
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  bump-version:
-    if: github.actor != 'github-actions[bot]'
+  validate-version:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Configure git user
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Bump patch version
+      - name: Validate version format
         run: |
           if [ ! -f VERSION ]; then
-            echo "0.0.0" > VERSION
+            echo "VERSION file not found."
+            exit 1
           fi
 
           current_version=$(tr -d ' \n\r\t' < VERSION)
@@ -37,22 +33,4 @@ jobs:
             exit 1
           fi
 
-          major=${BASH_REMATCH[1]}
-          minor=${BASH_REMATCH[2]}
-          patch=${BASH_REMATCH[3]}
-          next_patch=$((patch + 1))
-          next_version="${major}.${minor}.${next_patch}"
-
-          echo "$next_version" > VERSION
-          echo "NEXT_VERSION=$next_version" >> "$GITHUB_ENV"
-
-      - name: Commit and push bump
-        run: |
-          if git diff --quiet -- VERSION; then
-            echo "Nenhuma mudanca de versao para publicar."
-            exit 0
-          fi
-
-          git add VERSION
-          git commit -m "chore: bump version to ${NEXT_VERSION} [skip ci]"
-          git push
+          echo "Versao atual: $current_version"
