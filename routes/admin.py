@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 VALID_PROFILES = ("Solicitante", "CCM", "Administrador", "SIC")
 
 
+def _is_auth_user_not_found(error: Exception) -> bool:
+    """Detecta erro idempotente de exclusao quando o usuario ja nao existe no Auth."""
+    status_code = getattr(error, "status", None) or getattr(error, "status_code", None)
+    if status_code == 404:
+        return True
+
+    message = (str(error) or "").lower()
+    return "user not found" in message or "not found" in message
+
+
 def _normalize_profile(perfil: str | None) -> str:
     perfil_normalizado = (perfil or "").strip()
     mapa = {
@@ -323,14 +333,23 @@ def excluir_usuario(usuario_id):
     payload = request.get_json(silent=True) or {}
     ator_id = get_current_user_context().get('id')
 
+    if ator_id and usuario_id == ator_id:
+        return jsonify({'erro': 'Nao e permitido excluir o proprio usuario enquanto logado.'}), 400
+
     try:
         supabase = _get_supabase_client()
         antes_sel = _selecionar_usuario_por_id(supabase, usuario_id)
         if not antes_sel.data:
             return jsonify({"erro": "Usuário não encontrado."}), 404
 
-        # Remove do Auth (quando a FK existe com ON DELETE CASCADE, apaga de usuarios automaticamente).
-        supabase.auth.admin.delete_user(usuario_id)
+        # Remove do Auth. Se ja nao existir no Auth, trata como idempotente e segue limpeza local.
+        try:
+            supabase.auth.admin.delete_user(usuario_id)
+        except AuthApiError as exc:
+            if _is_auth_user_not_found(exc):
+                logger.warning('Usuario ausente no Auth durante exclusao admin id=%s; seguindo limpeza local.', usuario_id)
+            else:
+                raise
 
         # Garantia defensiva caso o banco não esteja com cascata configurada.
         supabase.table("usuarios").delete().eq("id", usuario_id).execute()
@@ -353,7 +372,8 @@ def excluir_usuario(usuario_id):
 
         return jsonify({"mensagem": "Usuário excluído com sucesso."}), 200
     except AuthApiError:
-        return jsonify({'erro': 'Falha de autenticacao ao excluir usuario.'}), 401
+        logger.exception('Falha no provedor de autenticacao ao excluir usuario id=%s', usuario_id)
+        return jsonify({'erro': 'Nao foi possivel excluir o usuario no provedor de autenticacao.'}), 502
     except PostgrestAPIError:
         return jsonify({'erro': 'Nao foi possivel excluir o usuario.'}), 500
     except Exception:

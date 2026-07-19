@@ -41,9 +41,9 @@
 
       <div id="wizard-step-1">
         <div class="tipo-tabs" role="tablist" aria-label="Tipo de atendimento">
-          <button type="button" class="tipo-tab" data-tipo="ESTACAO" role="tab" aria-selected="false">ESTA&Ccedil;&Atilde;O</button>
-          <button type="button" class="tipo-tab" data-tipo="MRO" role="tab" aria-selected="false">MRO</button>
-          <button type="button" class="tipo-tab" data-tipo="VIA" role="tab" aria-selected="false">VIA</button>
+          <button type="button" class="tipo-tab" data-tipo="ESTACAO" role="tab" aria-selected="false">🚉 ESTA&Ccedil;&Atilde;O</button>
+          <button type="button" class="tipo-tab" data-tipo="MRO" role="tab" aria-selected="false">🚈 MRO</button>
+          <button type="button" class="tipo-tab" data-tipo="VIA" role="tab" aria-selected="false">🛤️ VIA</button>
         </div>
       </div>
 
@@ -1704,7 +1704,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   /* ── Wizard: constantes e funções ── */
-  const TIPO_ICONE = { ESTACAO: '🏢', MRO: '🔧', VIA: '🛤️' };
+  const TIPO_ICONE = { ESTACAO: '🚉', MRO: '🚈', VIA: '🛤️' };
   const TIPO_LABEL = { ESTACAO: 'Estação', MRO: 'MRO', VIA: 'Via' };
 
   function wizardMostrarPasso1() {

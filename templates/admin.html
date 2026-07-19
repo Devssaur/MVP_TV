@@ -3,9 +3,7 @@
 {% block title %}Administração{% endblock %}
 
 {% block toolbar_nav %}
-<a href="/admin"          class="nav-tab active">Painel Admin</a>
-<a href="/admin/usuarios" class="nav-tab">Usuários</a>
-<a href="/admin/logs"     class="nav-tab">Logs de Auditoria</a>
+<a href="/admin" class="nav-tab active">Painel Admin</a>
 {% endblock %}
 
 {% block content %}
@@ -507,6 +505,11 @@ async function _salvarEdicaoUsuario(usuarioId, payload) {
 function confirmarExclusaoUsuario(id) {
   const usuario = window._adminStore ? window._adminStore.getUsuarioById(id) : null;
   const nome = usuario && usuario.nome ? usuario.nome : 'este usuário';
+
+  if (id === _adminId()) {
+    Toast.warning('Voce nao pode excluir seu proprio usuario enquanto estiver logado.');
+    return;
+  }
 
   ConfirmModal.show({
     title: 'Excluir usuário',
