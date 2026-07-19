@@ -33,13 +33,20 @@ def _normalize_profile(perfil: str | None) -> str:
     return mapa.get(perfil_normalizado.upper(), perfil_normalizado)
 
 
+_supabase_client: Client | None = None
+
+
 def _get_supabase_client() -> Client:
-    supabase_url = os.getenv("SUPABASE_URL")
-    # Operações admin usam a service_role key para bypasser RLS
-    supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
-    if not supabase_url or not supabase_key:
-        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.")
-    return create_client(supabase_url, supabase_key)
+    """Singleton do cliente Supabase — evita overhead de reconexao a cada request HTTP."""
+    global _supabase_client
+    if _supabase_client is None:
+        supabase_url = os.getenv("SUPABASE_URL")
+        # Operações admin usam a service_role key para bypasser RLS
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+        if not supabase_url or not supabase_key:
+            raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.")
+        _supabase_client = create_client(supabase_url, supabase_key)
+    return _supabase_client
 
 
 def _registrar_log(supabase: Client, evento: str, payload: dict | None, usuario_id: str | None = None) -> None:

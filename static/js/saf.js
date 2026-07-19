@@ -127,6 +127,11 @@ const API = (() => {
           requestBody: sanitizeBodyForLog(body),
           response: json,
         });
+        if (res.status === 401) {
+          Auth.clearUser();
+          window.location.href = '/login';
+          return { ok: false, status: res.status, data: json };
+        }
       }
       return { ok: res.ok, status: res.status, data: json };
     } catch (err) {
@@ -188,6 +193,11 @@ const API = (() => {
     },
     sistemasPorTipo: (tipo) => {
       let url = '/dados/sistemas-por-tipo';
+      if (tipo) url += `?tipo=${encodeURIComponent(tipo)}`;
+      return request('GET', url);
+    },
+    prefetchFormulario: (tipo) => {
+      let url = '/dados/prefetch-formulario';
       if (tipo) url += `?tipo=${encodeURIComponent(tipo)}`;
       return request('GET', url);
     },

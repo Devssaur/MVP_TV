@@ -39,11 +39,23 @@
         <span class="section-num">1</span> Tipo de atendimento
       </div>
 
-      <div class="tipo-tabs" role="tablist" aria-label="Tipo de atendimento">
-        <button type="button" class="tipo-tab selected" data-tipo="ESTACAO" role="tab" aria-selected="true">ESTA&Ccedil;&Atilde;O</button>
-        <button type="button" class="tipo-tab" data-tipo="MRO" role="tab" aria-selected="false">MRO</button>
-        <button type="button" class="tipo-tab" data-tipo="VIA" role="tab" aria-selected="false">VIA</button>
+      <div id="wizard-step-1">
+        <div class="tipo-tabs" role="tablist" aria-label="Tipo de atendimento">
+          <button type="button" class="tipo-tab" data-tipo="ESTACAO" role="tab" aria-selected="false">ESTA&Ccedil;&Atilde;O</button>
+          <button type="button" class="tipo-tab" data-tipo="MRO" role="tab" aria-selected="false">MRO</button>
+          <button type="button" class="tipo-tab" data-tipo="VIA" role="tab" aria-selected="false">VIA</button>
+        </div>
       </div>
+
+      <div id="wizard-resumo" class="wizard-oculto wizard-resumo" style="margin-top:.75rem;">
+        <div class="wizard-resumo-info">
+          <span class="wizard-resumo-label">Tipo de Atendimento</span>
+          <span id="wizard-resumo-tipo-texto" class="wizard-resumo-tipo"></span>
+        </div>
+        <button type="button" id="btn-wizard-alterar" class="btn btn-outline btn-sm">Alterar</button>
+      </div>
+
+      <div id="wizard-step-2" class="wizard-oculto">
 
       <div class="flux-grid flux-grid-top" id="flux-grid-top" style="margin-top:.85rem;display:none;"></div>
 
@@ -168,9 +180,11 @@
         <div id="avaria-legenda" class="avaria-legenda"></div>
         <span class="form-error" id="desc-error" style="display:none;">Descreva o problema com ao menos 3 caracteres.</span>
       </div>
-    </div>
 
-    <div class="form-section">
+      </div><!-- /wizard-step-2 -->
+    </div><!-- /form-section tipo -->
+
+    <div class="form-section wizard-form-extra wizard-oculto">
       <div class="form-section-title">
         <span class="section-num">2</span> Foto do Problema
         <span class="required" style="font-size:.75rem;font-weight:700;">*</span>
@@ -203,7 +217,7 @@
       </div>
     </div>
 
-    <div style="display:flex;gap:.75rem;justify-content:flex-end;padding:1rem 0 .5rem;">
+    <div class="wizard-form-extra wizard-oculto" style="display:flex;gap:.75rem;justify-content:flex-end;padding:1rem 0 .5rem;">
       <a href="/minhassafs" class="btn btn-outline">Cancelar</a>
       <button type="submit" id="btn-submit" class="btn btn-accent btn-lg" disabled>Enviar Solicita&ccedil;&atilde;o</button>
     </div>
@@ -483,6 +497,43 @@
       gap: .5rem;
     }
 
+  }
+
+  /* ── Wizard de 2 passos ── */
+  .wizard-oculto {
+    display: none !important;
+  }
+
+  .wizard-resumo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: var(--surface);
+    border: 1.5px solid var(--primary);
+    border-radius: var(--radius-lg);
+    padding: .75rem 1.1rem;
+    margin-bottom: .25rem;
+  }
+
+  .wizard-resumo-info {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+  }
+
+  .wizard-resumo-label {
+    font-size: .72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .wizard-resumo-tipo {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--primary);
   }
 </style>
 {% endblock %}
@@ -936,6 +987,41 @@ document.addEventListener('DOMContentLoaded', async function () {
     refreshSearchableSelect(carroSel);
   }
 
+  async function carregarPrefetchFormulario(tipo) {
+    sistemaSel.innerHTML = '<option value=""></option>';
+    sistemaSel.disabled = true;
+    sistemasCache = [];
+    refreshSearchableSelect(sistemaSel);
+
+    let prefetchData = sistemasPorTipoCache.get(tipo + '_prefetch');
+    if (!prefetchData) {
+      const res = await API.prefetchFormulario(tipo);
+      if (res.ok && res.data) {
+        prefetchData = res.data;
+        sistemasPorTipoCache.set(tipo + '_prefetch', prefetchData);
+        sistemasPorTipoCache.set(tipo, prefetchData.sistemas);
+        if (prefetchData.subsistemas_por_sistema) {
+          Object.entries(prefetchData.subsistemas_por_sistema).forEach(([sid, list]) => {
+            subsistemasPorSistemaCache.set(sid, list);
+          });
+        }
+      }
+    }
+
+    if (prefetchData) {
+      sistemasCache = prefetchData.sistemas || [];
+      sistemaSel.innerHTML = '<option value=""></option>' + sistemasCache
+        .map(item => `<option value="${escHtml(item.id)}" data-codigo="${escHtml(item.codigo || '')}">${escHtml(item.label || item.nome || item.id)}</option>`)
+        .join('');
+      sistemaSel.disabled = false;
+      sistemaSel.value = '';
+      sistemaIdHidden.value = '';
+      refreshSearchableSelect(sistemaSel);
+    } else {
+      await carregarSistemasPorTipo(tipo);
+    }
+  }
+
   async function carregarSistemasPorTipo(tipo) {
     sistemaSel.innerHTML = '<option value=""></option>';
     sistemaSel.disabled = true;
@@ -1270,7 +1356,11 @@ document.addEventListener('DOMContentLoaded', async function () {
       return;
     }
 
-    await carregarSistemasPorTipo(tipo);
+    // Paraleliza prefetch de dados mestres com a carga de local
+    await Promise.all([
+      carregarPrefetchFormulario(tipo),
+      carregarLocalPorLinha()
+    ]);
     sistemaIdHidden.value = '';
     subsistemaIdHidden.value = '';
 
@@ -1287,12 +1377,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     refreshSearchableSelect(subsistemaSel);
     resetFalhaSelect();
 
-    await carregarLocalPorLinha();
     await atualizarCampoEquipamentoPorSubsistema();
 
     if (tipo === 'MRO') {
-      await carregarSubsistemas();
-      await carregarSeriesMro();
+      // Paraleliza também subsistemas e séries para MRO
+      await Promise.all([
+        carregarSubsistemas(),
+        carregarSeriesMro()
+      ]);
     } else {
       resetMroTrens();
     }
@@ -1611,10 +1703,41 @@ document.addEventListener('DOMContentLoaded', async function () {
     checkFormValid();
   }
 
+  /* ── Wizard: constantes e funções ── */
+  const TIPO_ICONE = { ESTACAO: '🏢', MRO: '🔧', VIA: '🛤️' };
+  const TIPO_LABEL = { ESTACAO: 'Estação', MRO: 'MRO', VIA: 'Via' };
+
+  function wizardMostrarPasso1() {
+    document.querySelectorAll('.tipo-tab').forEach(btn => {
+      btn.classList.remove('selected');
+      btn.setAttribute('aria-selected', 'false');
+    });
+    document.getElementById('wizard-step-1').classList.remove('wizard-oculto');
+    document.getElementById('wizard-resumo').classList.add('wizard-oculto');
+    document.getElementById('wizard-step-2').classList.add('wizard-oculto');
+    document.querySelectorAll('.wizard-form-extra').forEach(el => el.classList.add('wizard-oculto'));
+  }
+
+  function wizardMostrarPasso2(tipo) {
+    document.getElementById('wizard-step-1').classList.add('wizard-oculto');
+    document.getElementById('wizard-resumo-tipo-texto').textContent =
+      `${TIPO_ICONE[tipo] || ''} ${TIPO_LABEL[tipo] || tipo}`;
+    document.getElementById('wizard-resumo').classList.remove('wizard-oculto');
+    document.getElementById('wizard-step-2').classList.remove('wizard-oculto');
+    document.querySelectorAll('.wizard-form-extra').forEach(el => el.classList.remove('wizard-oculto'));
+  }
+
+  document.getElementById('btn-wizard-alterar').addEventListener('click', function () {
+    tipoSelecionado = 'ESTACAO';
+    resetCamposFormulario();
+    wizardMostrarPasso1();
+  });
+
   document.querySelectorAll('.tipo-tab').forEach(btn => {
     btn.addEventListener('click', async () => {
       const tipo = btn.dataset.tipo || 'ESTACAO';
       await setTipo(tipo);
+      wizardMostrarPasso2(tipo);
     });
   });
 
@@ -1863,13 +1986,16 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
   });
   prioridadeHidden.value = prioSel.value || 'ALTA';
-  await setTipo('ESTACAO');
-  await carregarLocalPorLinha();
-  await atualizarCampoEquipamentoPorSubsistema();
-  atualizarLayoutPorTipo();
+
   if (isEditMode) {
+    // Modo edição: carrega SAF (que já chama setTipo internamente) e vai direto ao Passo 2
     await carregarSafParaEdicao();
+    wizardMostrarPasso2(tipoSelecionado);
+  } else {
+    // Modo normal: exibe apenas o Passo 1 (seleção de tipo)
+    wizardMostrarPasso1();
   }
+
   checkFormValid();
 });
 </script>

@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, make_response, request
 from dotenv import load_dotenv
 from supabase import Client, create_client
 from routes.security import require_auth
@@ -11,14 +11,26 @@ dados_bp = Blueprint("dados_bp", __name__)
 logger = logging.getLogger(__name__)
 
 
+_supabase_client: Client | None = None
+
+
 def _get_supabase_client() -> Client:
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    """Singleton do cliente Supabase — evita overhead de reconexao a cada request HTTP."""
+    global _supabase_client
+    if _supabase_client is None:
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+        if not supabase_url or not supabase_key:
+            raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_KEY nao configuradas.")
+        _supabase_client = create_client(supabase_url, supabase_key)
+    return _supabase_client
 
-    if not supabase_url or not supabase_key:
-        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_KEY nao configuradas.")
 
-    return create_client(supabase_url, supabase_key)
+def _json_cached(data: dict, max_age: int = 300):
+    """Retorna Response JSON com Cache-Control para dados mestres que mudam raramente."""
+    resp = make_response(jsonify(data))
+    resp.headers['Cache-Control'] = f'private, max-age={max_age}'
+    return resp
 
 
 def _dist_sq(lat1, lng1, lat2, lng2):
@@ -301,7 +313,7 @@ def listar_estacoes():
             if str(r.get("linha") or "").strip() and str(r.get("estacao") or "").strip()
         ]
 
-        return jsonify({"estacoes": estacoes, "total": len(estacoes)}), 200
+        return _json_cached({"estacoes": estacoes, "total": len(estacoes)})
     except Exception:
         logger.exception('Erro ao listar estacoes')
         return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
@@ -336,7 +348,7 @@ def listar_subsistemas():
             if r.get('id') and r.get('sistema_id')
         ]
 
-        return jsonify({'subsistemas': subsistemas, 'total': len(subsistemas)}), 200
+        return _json_cached({'subsistemas': subsistemas, 'total': len(subsistemas)})
     except Exception:
         logger.exception('Erro ao listar subsistemas')
         return jsonify({'erro': 'Nao foi possivel consultar os subsistemas.'}), 500
@@ -387,10 +399,85 @@ def listar_sistemas_por_tipo():
                 'label': nome,
             })
 
-        return jsonify({'sistemas': sistemas, 'total': len(sistemas)}), 200
+        return _json_cached({'sistemas': sistemas, 'total': len(sistemas)})
     except Exception:
         logger.exception('Erro ao listar sistemas por tipo=%s', tipo)
         return jsonify({'erro': 'Nao foi possivel consultar os sistemas.'}), 500
+
+
+@dados_bp.route('/prefetch-formulario', methods=['GET'])
+@require_auth(("Solicitante", "CCM", "Administrador", "SIC"))
+def prefetch_formulario():
+    """Retorna sistemas + subsistemas do tipo em uma unica requisicao.
+
+    Substitui as chamadas sequenciais /sistemas-por-tipo e /subsistemas do frontend,
+    reduzindo os roundtrips HTTP ao trocar o tipo de atendimento no wizard.
+
+    Query params:
+      tipo - ESTACAO | MRO | VIA
+    """
+    tipo = (request.args.get('tipo') or '').strip().upper()
+    ids_por_tipo = {
+        'MRO':     [1],
+        'ESTACAO': [2, 5, 7, 8],
+        'VIA':     [3, 4, 6],
+    }
+    ids_permitidos = ids_por_tipo.get(tipo)
+    if not ids_permitidos:
+        return jsonify({'erro': 'Parametro tipo invalido.'}), 400
+
+    try:
+        supabase = _get_supabase_client()
+
+        # Busca sistemas e todos os subsistemas do tipo de uma só vez
+        sis_result = (
+            supabase.table('sistemas')
+            .select('id, nome, codigo')
+            .in_('id', ids_permitidos)
+            .order('id')
+            .execute()
+        )
+        sub_result = (
+            supabase.table('subsistemas')
+            .select('id, sistema_id, codigo, nome')
+            .in_('sistema_id', ids_permitidos)
+            .order('sistema_id')
+            .order('nome')
+            .execute()
+        )
+
+        # Formata sistemas mantendo a ordem definida pelo tipo
+        by_id = {int(r.get('id')): r for r in (sis_result.data or []) if r.get('id') is not None}
+        sistemas = []
+        for sis_id in ids_permitidos:
+            row = by_id.get(int(sis_id), {})
+            nome = str(row.get('nome') or f'Sistema {sis_id}').strip()
+            codigo = str(row.get('codigo') or '').strip()
+            sistemas.append({'id': int(sis_id), 'nome': nome, 'codigo': codigo, 'label': nome})
+
+        # Agrupa subsistemas por sistema_id (chaves string para compatibilidade JSON/JS)
+        subsistemas_por_sistema: dict = {}
+        for r in (sub_result.data or []):
+            sid = str(r.get('sistema_id') or '').strip()
+            if not sid or not r.get('id') or not r.get('sistema_id'):
+                continue
+            if sid not in subsistemas_por_sistema:
+                subsistemas_por_sistema[sid] = []
+            subsistemas_por_sistema[sid].append({
+                'id': r.get('id'),
+                'sistema_id': r.get('sistema_id'),
+                'codigo': str(r.get('codigo') or '').strip(),
+                'nome': str(r.get('nome') or '').strip(),
+            })
+
+        return _json_cached({
+            'sistemas': sistemas,
+            'subsistemas_por_sistema': subsistemas_por_sistema,
+        })
+
+    except Exception:
+        logger.exception('Erro ao prefetch formulario tipo=%s', tipo)
+        return jsonify({'erro': 'Nao foi possivel carregar os dados do formulario.'}), 500
 
 
 @dados_bp.route('/falhas', methods=['GET'])
@@ -513,7 +600,7 @@ def listar_opcoes_formulario():
                 .execute()
             )
             valores = sorted({str(r.get('serie_trem') or '').strip() for r in (result.data or []) if str(r.get('serie_trem') or '').strip()})
-            return jsonify({'opcoes': [{'value': v, 'label': v} for v in valores], 'total': len(valores)}), 200
+            return _json_cached({'opcoes': [{'value': v, 'label': v} for v in valores], 'total': len(valores)})
 
         if tipo == 'trem':
             q = supabase.table('frotas_trens').select('prefixo_trem').order('prefixo_trem')
@@ -555,7 +642,7 @@ def listar_opcoes_formulario():
                     continue
                 seen.add(value)
                 opcoes.append({'value': value, 'label': label})
-            return jsonify({'opcoes': opcoes, 'total': len(opcoes)}), 200
+            return _json_cached({'opcoes': opcoes, 'total': len(opcoes)})
 
         if tipo == 'via':
             q = supabase.table('trechos_vias').select('codigo_local, linha, estacao_origem, estacao_destino').order('linha').order('estacao_origem')
