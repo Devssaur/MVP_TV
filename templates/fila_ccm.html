@@ -2,6 +2,12 @@
 
 {% block title %}Fila CCM{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+{% endblock %}
+
 {% block toolbar_nav %}
 <a href="/filaccm" class="nav-tab active">Fila de Análise</a>
 {% endblock %}
@@ -13,7 +19,6 @@
     <div>
       <p class="page-title">Fila de Análise do CCM-E</p>
     </div>
-    <button class="btn btn-outline" id="btn-refresh">&#8635; Atualizar</button>
     <span id="last-sync" style="font-size:.75rem;color:var(--text-muted);align-self:center;"></span>
   </div>
 
@@ -43,13 +48,13 @@
     </div>
 
     <div class="ccm-filter-item">
-      <label class="equip-filter-label" for="date-from-filter">Data notificacao (de)</label>
-      <input id="date-from-filter" class="equip-filter-select" type="date">
+      <label class="equip-filter-label" for="order-number-filter">Numero da ordem</label>
+      <input id="order-number-filter" class="equip-filter-select" type="search" placeholder="Ex: 4101234567">
     </div>
 
     <div class="ccm-filter-item">
-      <label class="equip-filter-label" for="date-to-filter">Data notificacao (ate)</label>
-      <input id="date-to-filter" class="equip-filter-select" type="date">
+      <label class="equip-filter-label" for="date-range-filter">Periodo</label>
+      <input id="date-range-filter" class="equip-filter-select ccm-date-range-input" type="text" placeholder="Selecione o intervalo de datas" readonly>
     </div>
 
     <button class="btn btn-ghost btn-sm" id="btn-clear-ccm-filters" type="button">Limpar filtros</button>
@@ -60,33 +65,140 @@
     <div class="spinner-center"><div class="spinner"></div></div>
   </div>
 
+  <div class="modal-backdrop" id="modal-aceite-ccm">
+    <div class="modal ccm-aceite-modal">
+      <div class="modal-header">
+        <span class="modal-title">Aceite CCM e Preparação da Nota SAP</span>
+        <button class="modal-close" id="btn-close-modal-aceite">✕</button>
+      </div>
+      <div class="modal-body ccm-aceite-body">
+        <div class="ccm-aceite-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="aceite-tipo-nota">Tipo de nota</label>
+            <select id="aceite-tipo-nota" class="form-control">
+              <option value="YE" selected>YE - Corretiva emergencial (impacto operacional)</option>
+              <option value="YP">YP - Corretiva programada (sem impacto)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="aceite-centro-trabalho">Centro de trabalho</label>
+            <select id="aceite-centro-trabalho" class="form-control"></select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="aceite-sintoma">Sintoma da falha</label>
+          <select id="aceite-sintoma" class="form-control"></select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="aceite-texto-breve">Texto breve da nota</label>
+          <div class="ccm-copy-row">
+            <textarea id="aceite-texto-breve" class="form-control ccm-copy-textarea" rows="2"></textarea>
+            <button class="btn btn-outline btn-sm" id="btn-copy-texto-breve" type="button">Copiar</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="aceite-texto-longo">Texto longo da nota</label>
+          <div class="ccm-copy-row">
+            <textarea id="aceite-texto-longo" class="form-control ccm-copy-textarea" rows="8"></textarea>
+            <button class="btn btn-outline btn-sm" id="btn-copy-texto-longo" type="button">Copiar</button>
+          </div>
+        </div>
+
+        <div class="ccm-aceite-grid-2 ccm-aceite-nota-ordem">
+          <div class="form-group">
+            <label class="form-label ccm-center" for="aceite-numero-nota">Nota</label>
+            <input id="aceite-numero-nota" class="form-control ccm-center" maxlength="30" placeholder="Ex: 120123456789">
+          </div>
+          <div class="form-group">
+            <label class="form-label ccm-center" for="aceite-numero-ordem">Ordem</label>
+            <input id="aceite-numero-ordem" class="form-control ccm-center" maxlength="30" placeholder="Ex: 4101234567">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancelar-modal-aceite" type="button">Cancelar</button>
+        <button class="btn btn-success" id="btn-gravar-modal-aceite" type="button">Gravar</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <style>
 /* ---- CCM Queue: grouped card layout ---- */
 .ccm-group { margin-bottom: 1.75rem; }
+.ccm-group-accordion { margin-bottom: .15rem; }
+.ccm-searchable-select { position: relative; }
+.ccm-searchable-input { min-height: 42px; height: 42px; font-size: .95rem; padding-right: 2.2rem; background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%); background-position: calc(100% - 18px) 17px, calc(100% - 12px) 17px; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+.ccm-searchable-menu { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 8px 20px rgba(0,0,0,.12); }
+.ccm-searchable-option { padding: .55rem .75rem; font-size: .92rem; color: var(--text); cursor: pointer; border-bottom: 1px solid rgba(0,0,0,.04); }
+.ccm-searchable-option:last-child { border-bottom: 0; }
+.ccm-searchable-option:hover, .ccm-searchable-option.active { background: rgba(27,42,94,.08); }
+.ccm-searchable-empty { padding: .55rem .75rem; font-size: .88rem; color: var(--text-muted); }
+.native-select-hidden { display: none; }
 
 .ccm-group-header {
   display: flex;
   align-items: center;
-  gap: .65rem;
+  justify-content: space-between;
+  gap: .8rem;
+  width: 100%;
   padding: .6rem 1rem;
   background: var(--primary);
+  border: 0;
   color: #fff;
   border-radius: var(--radius) var(--radius) 0 0;
   font-weight: 700;
   font-size: .88rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ccm-group-header-static {
+  cursor: default;
 }
 .ccm-group-header-left {
   display: flex;
   align-items: center;
-  gap: .65rem;
+  gap: .45rem;
   min-width: 0;
 }
 .ccm-group-header-right {
-  margin-left: auto;
   display: flex;
   align-items: center;
+  gap: .55rem;
+  white-space: nowrap;
+}
+.ccm-group-datetime {
+  font-size: .78rem;
+  font-weight: 600;
+  opacity: .95;
+}
+.ccm-group-body {
+  display: none;
+}
+.ccm-group-body.open {
+  display: block;
+}
+.ccm-group-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: .45rem;
+  padding: .55rem .8rem;
+  border: 1px solid var(--border);
+  border-top: none;
+  background: #f8fafc;
+}
+.ccm-date-range-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+.ccm-date-range-input {
+  min-width: 280px;
 }
 .ccm-dup-header-btn.active {
   filter: saturate(1.2);
@@ -265,9 +377,9 @@
 .ccm-desc {
   font-size: .84rem;
   color: var(--text-muted);
-  line-height: 1.55;
-  margin-bottom: .5rem;
-  white-space: pre-wrap;
+  line-height: 1.28;
+  margin-bottom: .35rem;
+  white-space: normal;
   word-break: break-word;
 }
 .ccm-meta-row {
@@ -321,6 +433,37 @@
   border-radius: 0 var(--radius) var(--radius) 0;
   margin-top: .5rem;
   font-style: italic;
+}
+
+.ccm-aceite-modal {
+  width: min(920px, 96vw);
+  max-width: 920px;
+}
+.ccm-aceite-body {
+  max-height: min(72vh, 760px);
+  overflow-y: auto;
+}
+.ccm-aceite-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+}
+.ccm-copy-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .5rem;
+  align-items: start;
+}
+.ccm-copy-textarea {
+  font-family: 'Courier New', monospace;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+.ccm-aceite-nota-ordem .form-group {
+  text-align: center;
+}
+.ccm-center {
+  text-align: center;
 }
 
 /* Right: actions */
@@ -404,6 +547,22 @@
   background: rgba(220, 38, 38, .08);
   color: var(--danger);
   border-color: var(--danger);
+}
+
+/* CCM copy badges */
+.ccm-copy-badge {
+  border: 0;
+  padding: .28rem .45rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--trans), opacity var(--trans);
+  white-space: nowrap;
+}
+.ccm-copy-badge:hover {
+  transform: translateY(-1px);
+  opacity: .92;
 }
 
 /* SAP badge variants */
@@ -539,6 +698,12 @@
   .ccm-recusa-form {
     min-width: 0;
   }
+  .ccm-aceite-grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .ccm-copy-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 {% endblock %}
@@ -550,13 +715,134 @@
   let activeFilter = 'PENDENTES';
   let activeLine   = '';
   let activeStation = '';
+  let activeOrderSearch = '';
   let activeDateFrom = '';
-  let activeDateTo   = '';
+  let activeDateTo = '';
   let estacoesCache = [];
   let estacaoById = new Map();
   let estacoesPorLinha = new Map();
+  let subsistemasPorSistemaCache = new Map();
+  let centrosTrabalhoCache = [];
+  let aceiteSafAtual = null;
+  let aceiteIdsDuplicadas = [];
+  let sintomasModalCache = [];
+  let dateRangePicker = null;
   const duplicateModeGroups = new Set();
   const duplicateSelections = new Map();
+  const expandedGroups = new Set();
+  let knownPendingIds = new Set();
+  let pendingMonitorInitialized = false;
+  let notificationAudioCtx = null;
+  let notificationAudioUnlocked = false;
+
+  function unlockNotificationAudio() {
+    if (notificationAudioUnlocked) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) {
+      notificationAudioUnlocked = true;
+      return;
+    }
+
+    if (!notificationAudioCtx) notificationAudioCtx = new Ctx();
+
+    const onReady = () => {
+      notificationAudioUnlocked = true;
+      document.removeEventListener('click', onReady);
+      document.removeEventListener('keydown', onReady);
+      document.removeEventListener('touchstart', onReady);
+    };
+
+    if (notificationAudioCtx.state === 'suspended') {
+      notificationAudioCtx.resume().then(onReady).catch(() => {});
+      return;
+    }
+
+    onReady();
+  }
+
+  function playNewPendingAlertSound() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+
+    if (!notificationAudioCtx) notificationAudioCtx = new Ctx();
+    if (notificationAudioCtx.state !== 'running') return;
+
+    const now = notificationAudioCtx.currentTime;
+    const pattern = [
+      { t: 0.00, f: 1280, d: 0.14 },
+      { t: 0.17, f: 920, d: 0.14 },
+      { t: 0.34, f: 1280, d: 0.14 },
+      { t: 0.51, f: 920, d: 0.20 },
+    ];
+
+    pattern.forEach(step => {
+      const osc = notificationAudioCtx.createOscillator();
+      const gain = notificationAudioCtx.createGain();
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(step.f, now + step.t);
+
+      gain.gain.setValueAtTime(0.0001, now + step.t);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + step.t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + step.t + step.d);
+
+      osc.connect(gain);
+      gain.connect(notificationAudioCtx.destination);
+      osc.start(now + step.t);
+      osc.stop(now + step.t + step.d + 0.01);
+    });
+  }
+
+  function notifyNewPendingSafs(items) {
+    const currentPendingIds = new Set(
+      (items || [])
+        .filter(s => s && s.status === 'ABERTA')
+        .map(s => String(s.id || '').trim())
+        .filter(Boolean)
+    );
+
+    if (!pendingMonitorInitialized) {
+      knownPendingIds = currentPendingIds;
+      pendingMonitorInitialized = true;
+      return;
+    }
+
+    const newPendingCount = [...currentPendingIds].filter(id => !knownPendingIds.has(id)).length;
+    knownPendingIds = currentPendingIds;
+
+    if (newPendingCount <= 0) return;
+
+    const msg = newPendingCount === 1
+      ? 'Nova solicitacao pendente recebida na fila CCM.'
+      : `${newPendingCount} novas solicitacoes pendentes recebidas na fila CCM.`;
+    Toast.success(msg);
+    playNewPendingAlertSound();
+  }
+
+  function parseOrderNumber(item) {
+    const integ = item.saf_integracao_sap || {};
+    return String(item.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
+  }
+
+  function parseOrderGroupMeta(item) {
+    const ordem = parseOrderNumber(item);
+    if (ordem) {
+      return { key: `ordem:${ordem}`, title: ordem };
+    }
+    const equip = String(item.equipamento || item.titulo_falha || 'Sem equipamento').trim();
+    return { key: `sem-ordem:${equip}`, title: 'SEM ORDEM' };
+  }
+
+  function parseClassicGroupMeta(item) {
+    const equip = String(item.equipamento || item.titulo_falha || 'Sem Equipamento').trim();
+    return { key: `classic:${equip}`, title: equip };
+  }
+
+  function groupMatches(item, groupKey) {
+    if (!groupKey) return false;
+    if (groupKey.startsWith('classic:')) return parseClassicGroupMeta(item).key === groupKey;
+    return parseOrderGroupMeta(item).key === groupKey;
+  }
 
   function toDateKey(iso) {
     if (!iso) return '';
@@ -619,8 +905,9 @@
       const id = String(e.id || '').trim();
       const linha = String(e.linha || '').trim();
       const estacao = String(e.estacao || '').trim();
+      const sigla = String(e.sigla || '').trim();
       if (!id) return;
-      estacaoById.set(id, { linha, estacao });
+      estacaoById.set(id, { linha, estacao, sigla });
       if (!linha || !estacao) return;
       if (!estacoesPorLinha.has(linha)) estacoesPorLinha.set(linha, new Set());
       estacoesPorLinha.get(linha).add(estacao);
@@ -664,6 +951,10 @@
     // TODAS: mostra tudo
     if (activeLine) items = items.filter(s => String(s._linha || '') === activeLine);
     if (activeStation) items = items.filter(s => norm(s._estacao) === norm(activeStation));
+    if (activeOrderSearch) {
+      const q = norm(activeOrderSearch);
+      items = items.filter(s => norm(parseOrderNumber(s)).includes(q));
+    }
     if (activeDateFrom) items = items.filter(s => {
       const d = String(s._data_notificacao || '');
       return d && d >= activeDateFrom;
@@ -721,12 +1012,49 @@
   }
 
   function syncFilterControls() {
-    const dateFromEl = document.getElementById('date-from-filter');
-    const dateToEl = document.getElementById('date-to-filter');
-    if (dateFromEl) dateFromEl.value = activeDateFrom;
-    if (dateToEl) dateToEl.value = activeDateTo;
+    const orderSearchEl = document.getElementById('order-number-filter');
+    const dateRangeEl = document.getElementById('date-range-filter');
+    if (orderSearchEl) orderSearchEl.value = activeOrderSearch;
+    if (dateRangePicker) {
+      const values = [];
+      if (activeDateFrom) values.push(activeDateFrom);
+      if (activeDateTo) values.push(activeDateTo);
+      if (values.length) dateRangePicker.setDate(values, false);
+      else dateRangePicker.clear(false);
+    } else if (dateRangeEl) {
+      dateRangeEl.value = activeDateFrom && activeDateTo
+        ? `${activeDateFrom} ate ${activeDateTo}`
+        : '';
+    }
     populateLineFilter();
     populateStationFilter();
+  }
+
+  function initDateRangePicker() {
+    const input = document.getElementById('date-range-filter');
+    if (!input || typeof flatpickr !== 'function') return;
+
+    dateRangePicker = flatpickr(input, {
+      mode: 'range',
+      dateFormat: 'Y-m-d',
+      altInput: true,
+      altFormat: 'd/m/Y',
+      locale: (flatpickr && flatpickr.l10ns && flatpickr.l10ns.pt) ? flatpickr.l10ns.pt : 'default',
+      allowInput: false,
+      clickOpens: true,
+      onChange: function (selectedDates) {
+        const toIso = (d) => d instanceof Date ? d.toISOString().slice(0, 10) : '';
+        if (!selectedDates.length) {
+          activeDateFrom = '';
+          activeDateTo = '';
+          renderQueue();
+          return;
+        }
+        activeDateFrom = toIso(selectedDates[0]);
+        activeDateTo = selectedDates[1] ? toIso(selectedDates[1]) : '';
+        renderQueue();
+      },
+    });
   }
 
   function escHtml(text) {
@@ -739,11 +1067,41 @@
   }
 
   function formatDescricaoComOcorrencia(texto) {
-    const escaped = escHtml(texto);
-    return escaped.replace(
+    const normalized = String(texto || '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .map(linha => linha.trim())
+      .filter(Boolean)
+      .join('\n');
+    const escaped = escHtml(normalized);
+    const highlighted = escaped.replace(
       /(Ocorr(?:e|ê)ncia com cliente:[^\n\r]*)/gi,
       '<strong style="color:#dc2626;font-weight:800;">$1</strong>'
     );
+    return highlighted.replace(/\n/g, '<br>');
+  }
+
+  async function copiarValorParaClipboard(valor, label) {
+    const texto = String(valor || '').trim();
+    if (!texto) {
+      Toast.warning(`Nenhum ${label} disponível para copiar.`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(texto);
+      Toast.success(`${label} copiado.`);
+    } catch (_err) {
+      Toast.error(`Não foi possível copiar ${label}.`);
+    }
+  }
+
+  function bindCopyActions(container) {
+    container?.querySelectorAll('[data-copy-value]').forEach(el => {
+      el.addEventListener('click', () => {
+        copiarValorParaClipboard(el.dataset.copyValue, el.dataset.copyLabel || 'valor');
+      });
+    });
   }
 
   // ───────── Render ─────────
@@ -761,71 +1119,135 @@
       return;
     }
 
-    // Group by equipment (fallback: titulo_falha)
-    const groups = new Map();
-    items.forEach(item => {
-      const key = item.equipamento || item.titulo_falha || 'Sem Equipamento';
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(item);
-    });
+    const itensExpansiveis = items.filter(s => s.status === 'APROVADA' && parseOrderNumber(s));
+    const itensComuns = items.filter(s => !(s.status === 'APROVADA' && parseOrderNumber(s)));
+    const blocos = [];
 
-    // Sort: groups with most pending first
-    const sorted = [...groups.entries()].sort(([, a], [, b]) => {
-      const pa = a.filter(x => x.status === 'ABERTA').length;
-      const pb = b.filter(x => x.status === 'ABERTA').length;
-      return pb - pa;
-    });
+    if (itensComuns.length) {
+      const classicGroups = new Map();
+      itensComuns.forEach(item => {
+        const meta = parseClassicGroupMeta(item);
+        if (!classicGroups.has(meta.key)) classicGroups.set(meta.key, { title: meta.title, items: [] });
+        classicGroups.get(meta.key).items.push(item);
+      });
+      const sortedClassic = [...classicGroups.entries()].sort(([, a], [, b]) => {
+        const pa = a.items.filter(x => x.status === 'ABERTA').length;
+        const pb = b.items.filter(x => x.status === 'ABERTA').length;
+        if (pb !== pa) return pb - pa;
+        return a.title.localeCompare(b.title, 'pt-BR');
+      });
+      blocos.push(...sortedClassic.map(([groupKey, groupData]) => renderClassicGroup(groupKey, groupData.title, groupData.items)));
+    }
 
-    container.innerHTML = sorted.map(([equip, list]) => renderGroup(equip, list)).join('');
+    if (itensExpansiveis.length) {
+      const groups = new Map();
+      itensExpansiveis.forEach(item => {
+        const meta = parseOrderGroupMeta(item);
+        if (!groups.has(meta.key)) groups.set(meta.key, { title: meta.title, items: [] });
+        groups.get(meta.key).items.push(item);
+      });
+      const sorted = [...groups.entries()].sort((a, b) => a[1].title.localeCompare(b[1].title, 'pt-BR', { numeric: true }));
+      blocos.push(...sorted.map(([groupKey, groupData]) => renderGroup(groupKey, groupData.title, groupData.items)));
+    }
+
+    container.innerHTML = blocos.join('');
+    bindCopyActions(container);
+
+    container.querySelectorAll('.js-group-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const groupKey = decodeURIComponent(btn.dataset.group || '');
+        if (!groupKey) return;
+        if (expandedGroups.has(groupKey)) expandedGroups.delete(groupKey);
+        else expandedGroups.add(groupKey);
+        renderQueue();
+      });
+    });
 
     container.querySelectorAll('.js-dup-toggle').forEach(btn => {
       btn.addEventListener('click', () => {
-        const equip = decodeURIComponent(btn.dataset.equip || '');
-        toggleDuplicadoGroup(equip);
+        const groupKey = decodeURIComponent(btn.dataset.group || '');
+        toggleDuplicadoGroup(groupKey);
       });
     });
 
     container.querySelectorAll('.js-dup-confirm').forEach(btn => {
       btn.addEventListener('click', () => {
-        const equip = decodeURIComponent(btn.dataset.equip || '');
-        confirmarDuplicadasGrupo(equip);
+        const groupKey = decodeURIComponent(btn.dataset.group || '');
+        confirmarDuplicadasGrupo(groupKey);
       });
     });
   }
 
-  function getSelectionSet(equip) {
-    if (!duplicateSelections.has(equip)) duplicateSelections.set(equip, new Set());
-    return duplicateSelections.get(equip);
+  function getSelectionSet(groupKey) {
+    if (!duplicateSelections.has(groupKey)) duplicateSelections.set(groupKey, new Set());
+    return duplicateSelections.get(groupKey);
   }
 
-  function renderGroup(equip, items) {
+  function renderGroup(groupKey, groupTitle, items) {
     const pend = items.filter(x => x.status === 'ABERTA').length;
-    const selectedCount = items.filter(x => x.status === 'ABERTA' && getSelectionSet(equip).has(x.id)).length;
-    const dupMode = duplicateModeGroups.has(equip);
+    const selectedCount = items.filter(x => x.status === 'ABERTA' && getSelectionSet(groupKey).has(x.id)).length;
+    const dupMode = duplicateModeGroups.has(groupKey);
+    const isExpanded = expandedGroups.has(groupKey);
+    const dtRef = items
+      .map(i => i.data_avaliacao || i.criado_em)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const dtLabel = dtRef ? Fmt.datetime(dtRef) : 'Sem data';
+    const duplicadoBtn = pend > 0
+      ? `<button class="btn btn-warning btn-sm ccm-dup-header-btn ${dupMode ? 'active' : ''} js-dup-toggle" data-group="${encodeURIComponent(groupKey)}">Duplicado</button>`
+      : '';
+    const confirmarSelecaoBtn = dupMode
+      ? `<button class="btn btn-outline btn-sm ccm-dup-confirm-btn js-dup-confirm" data-group="${encodeURIComponent(groupKey)}" ${selectedCount === 0 ? 'disabled' : ''}>Confirmar seleção${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>`
+      : '';
+    return `
+      <div class="ccm-group ccm-group-accordion">
+        <button type="button" class="ccm-group-header js-group-toggle" data-group="${encodeURIComponent(groupKey)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
+          <div class="ccm-group-header-left">
+            <span>${escHtml(groupTitle)}</span>
+          </div>
+          <div class="ccm-group-header-right">
+            <span class="ccm-group-datetime">${escHtml(dtLabel)}</span>
+          </div>
+        </button>
+        <div class="ccm-group-body ${isExpanded ? 'open' : ''}">
+          ${(duplicadoBtn || confirmarSelecaoBtn) ? `<div class="ccm-group-tools">${duplicadoBtn}${confirmarSelecaoBtn}</div>` : ''}
+          ${items.map(item => renderCard(item, groupKey)).join('')}
+        </div>
+      </div>`;
+  }
+
+  function renderClassicGroup(groupKey, groupTitle, items) {
+    const pend = items.filter(x => x.status === 'ABERTA').length;
+    const selectedCount = items.filter(x => x.status === 'ABERTA' && getSelectionSet(groupKey).has(x.id)).length;
+    const dupMode = duplicateModeGroups.has(groupKey);
     const pendBadge = pend > 0
       ? `<span class="ccm-gcount pend">${pend} pendente${pend > 1 ? 's' : ''}</span>`
       : '';
     const duplicadoBtn = pend > 0
-      ? `<button class="btn btn-warning btn-sm ccm-dup-header-btn ${dupMode ? 'active' : ''} js-dup-toggle" data-equip="${encodeURIComponent(equip)}">Duplicado</button>`
+      ? `<button class="btn btn-warning btn-sm ccm-dup-header-btn ${dupMode ? 'active' : ''} js-dup-toggle" data-group="${encodeURIComponent(groupKey)}">Duplicado</button>`
       : '';
     const confirmarSelecaoBtn = dupMode
-      ? `<button class="btn btn-outline btn-sm ccm-dup-confirm-btn js-dup-confirm" data-equip="${encodeURIComponent(equip)}" ${selectedCount === 0 ? 'disabled' : ''}>Confirmar seleção${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>`
+      ? `<button class="btn btn-outline btn-sm ccm-dup-confirm-btn js-dup-confirm" data-group="${encodeURIComponent(groupKey)}" ${selectedCount === 0 ? 'disabled' : ''}>Confirmar seleção${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>`
       : '';
+
     return `
       <div class="ccm-group">
-        <div class="ccm-group-header">
+        <div class="ccm-group-header ccm-group-header-static">
           <div class="ccm-group-header-left">
-            <span>&#9874; ${equip}</span>
+            <span>&#9874; ${escHtml(groupTitle)}</span>
             ${pendBadge}
             <span class="ccm-gcount">${items.length} total</span>
           </div>
           <div class="ccm-group-header-right">${duplicadoBtn}${confirmarSelecaoBtn}</div>
         </div>
-        ${items.map(item => renderCard(item, equip)).join('')}
+        <div class="ccm-group-body open">
+          ${items.map(item => renderCard(item, groupKey)).join('')}
+        </div>
       </div>`;
   }
 
-  function renderCard(item, equip) {
+  function renderCard(item, groupKey) {
     const saf    = item;
     const integ  = item.saf_integracao_sap || {};
     const id     = item.id;
@@ -840,7 +1262,12 @@
     }
 
     const notificadorHtml = saf.notificador_nome
-      ? `<div class="ccm-notificador"><span class="ccm-notif-nome">&#128100; ${saf.notificador_nome}</span>${saf.notificador_area ? `<span class="ccm-notif-area">${saf.notificador_area}</span>` : ''}${inicioFalhaTxt ? `<span class="ccm-notif-data">${inicioFalhaTxt}</span>` : ''}</div>`
+      ? `<div class="ccm-notificador"><span class="ccm-notif-nome">&#128100; ${escHtml(saf.notificador_nome)}</span>${saf.notificador_area ? `<span class="ccm-notif-area">${escHtml(saf.notificador_area)}</span>` : ''}${inicioFalhaTxt ? `<span class="ccm-notif-data">${escHtml(inicioFalhaTxt)}</span>` : ''}</div>`
+      : '';
+    const aprovadorNome = String(saf.aprovador_nome || '').trim();
+    const dataAvaliacao = item.data_avaliacao ? Fmt.datetime(item.data_avaliacao) : '';
+    const aprovadorHtml = (status === 'APROVADA' && (aprovadorNome || dataAvaliacao))
+      ? `<div class="ccm-notificador"><span class="ccm-notif-nome">&#128221; ${escHtml(aprovadorNome || 'Aprovador não informado')}</span><span class="ccm-notif-area">Aprovador</span>${dataAvaliacao ? `<span class="ccm-notif-data">${escHtml(`Aprovado em ${dataAvaliacao}`)}</span>` : ''}</div>`
       : '';
     const prio = String(saf.prioridade || '').toUpperCase();
     const criticidade = prio === 'BAIXA' || prio === '1' ? 1
@@ -859,14 +1286,28 @@
         </div>
       </div>`;
 
-    // QMNUM badge — aparece após aprovação
+    // Badges de Nota/Ordem na área superior do card
     let qmnumBadge = '';
-    if (integ.qmnum && integ.status_integracao === 'SUCESSO') {
-      const tipoLabel = integ.tipo_nota || '';
-      qmnumBadge = `<span class="badge" style="background:#1e3a5f;color:#fff;font-family:monospace;letter-spacing:.04em;" title="Nota SAP criada com sucesso">${tipoLabel} ${integ.qmnum}</span>`;
+    let ordemBadge = '';
+    let duplicadaBadge = '';
+    const numeroNota = String(saf.ccm_numero_nota || integ.qmnum || '').trim();
+    const numeroOrdem = String(saf.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
+
+    const isDuplicadaVisual = Boolean(saf.is_duplicada || saf.qmnum_duplicata || status === 'DUPLICADA');
+    duplicadaBadge = isDuplicadaVisual
+      ? `<span class="badge" style="background:#f59e0b;color:#fff;" title="Solicitação marcada como duplicada">Duplicada</span>`
+      : '';
+
+    if (status === 'APROVADA' && (numeroNota || numeroOrdem)) {
+      if (numeroNota) {
+        qmnumBadge = `<button type="button" class="ccm-copy-badge" data-copy-value="${escHtml(numeroNota)}" data-copy-label="número da nota" style="background:#1e3a5f;color:#fff;font-family:monospace;letter-spacing:.04em;" title="Copiar número da nota">Nota: ${escHtml(numeroNota)}</button>`;
+      }
+      if (numeroOrdem) {
+        ordemBadge = `<button type="button" class="ccm-copy-badge" data-copy-value="${escHtml(numeroOrdem)}" data-copy-label="número da ordem" style="background:#0f766e;color:#fff;font-family:monospace;letter-spacing:.04em;" title="Copiar número da ordem">Ordem: ${escHtml(numeroOrdem)}</button>`;
+      }
     } else if (integ.status_integracao === 'ERRO') {
       qmnumBadge = `<span class="badge" style="background:#7f1d1d;color:#fff;" title="Erro na integração SAP: ${integ.mensagem_erro || ''}">&#9888; SAP ERRO</span>`;
-    } else if (status === 'APROVADA' && !integ.qmnum) {
+    } else if (status === 'APROVADA') {
       qmnumBadge = `<span class="badge" style="background:#78350f;color:#fff;" title="Aguardando criação da nota no SAP">&#8987; SAP PENDENTE</span>`;
     }
 
@@ -878,9 +1319,9 @@
     // Action buttons
     let actionsHtml;
     if (status === 'ABERTA') {
-      const checked = getSelectionSet(equip).has(id) ? 'checked' : '';
-      const dupCheck = duplicateModeGroups.has(equip)
-        ? `<label class="ccm-dup-check-wrap"><input type="checkbox" id="dup-check-${id}" ${checked} onchange="window._ccmToggleDuplicadaItem('${id}', '${encodeURIComponent(equip)}', this.checked)"> Selecionar para duplicada</label>`
+      const checked = getSelectionSet(groupKey).has(id) ? 'checked' : '';
+      const dupCheck = duplicateModeGroups.has(groupKey)
+        ? `<label class="ccm-dup-check-wrap"><input type="checkbox" id="dup-check-${id}" ${checked} onchange="window._ccmToggleDuplicadaItem('${id}', '${encodeURIComponent(groupKey)}', this.checked)"> Selecionar para duplicada</label>`
         : '';
       actionsHtml = `
         <button class="btn btn-success btn-sm" onclick="window._ccmMostrarAceite('${id}')">&#10003; Aceitar</button>
@@ -911,7 +1352,10 @@
         <div class="ccm-card-meta">
           <span class="ccm-ticket">${ticket}</span>
           ${notificadorHtml}
+          ${aprovadorHtml}
           ${qmnumBadge}
+          ${ordemBadge}
+          ${duplicadaBadge}
         </div>
         <div class="ccm-card-photo">
           ${saf.anexo_evidencia_url
@@ -970,68 +1414,641 @@
     Toast.success('Criticidade atualizada.');
   }
 
-  function mostrarAceite(id) {
-    const actDiv = document.getElementById('actions-' + id);
-    if (!actDiv) return;
-    // O CCM escolhe o tipo de nota conforme impacto operacional (YE ou YP)
-    actDiv.innerHTML = `
-      <div class="ccm-recusa-form">
-        <label style="font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:2px;">Tipo de Nota SAP</label>
-        <select id="tipo-nota-${id}" style="font-size:.82rem;padding:.25rem .5rem;
-                border:1.5px solid var(--primary);border-radius:var(--radius);
-                background:var(--bg);color:var(--text);cursor:pointer;">
-          <option value="YP" selected>YP – Corretiva Programada (sem impacto)</option>
-          <option value="YE">YE – Corretiva Emergencial (impacto operacional)</option>
-        </select>
-        <button class="btn btn-success btn-sm" onclick="window._ccmAceitar('${id}')">&#10003; Confirmar</button>
-        <button class="btn btn-ghost btn-sm" onclick="window._ccmRenderQueue()">Cancelar</button>
-      </div>`;
+  function sanitizeSegment(value, fallback = 'N/I') {
+    const txt = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!txt || txt === '-' || txt.toUpperCase() === 'NAO INFORMADO') return fallback;
+    return txt;
+  }
+
+  function readDescricaoCampo(descricao, label) {
+    const texto = String(descricao || '');
+    if (!texto) return '';
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rx = new RegExp(`(?:^|\\n)${escaped}:\\s*([^\\n\\r]*)`, 'i');
+    const m = texto.match(rx);
+    return m && m[1] ? String(m[1]).trim() : '';
+  }
+
+  function inferSistemaId(item) {
+    const local = String(item?.local_instalacao || '').trim();
+    const localId = String(item?.local_instalacao_id || '').trim();
+    const candidatos = [
+      local.match(/TV\d{1,2}-([0-9]{1,2})(?:-|$)/i),
+      localId.match(/TV\d{1,2}-([0-9]{1,2})(?:-|$)/i),
+    ];
+    const hit = candidatos.find(Boolean);
+    return hit && hit[1] ? String(hit[1]).trim() : '';
+  }
+
+  function codigo3FromSubsistemaCodigo(codigo) {
+    const raw = String(codigo || '').trim();
+    if (!raw) return 'N/I';
+    const norm = raw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    return norm ? norm.slice(0, 3) : 'N/I';
+  }
+
+  function normalizeLocalToken(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9_\-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
+  function resolverLocalCurto(item) {
+    const descricao = String(item?.descricao_longa || '');
+    const local = String(item?.local_instalacao || '').trim().toUpperCase();
+    const localId = String(item?.local_instalacao_id || '').trim().toUpperCase();
+
+    const fromLocalEst = local.match(/-EST-([A-Z0-9_\-]+)/i);
+    if (fromLocalEst && fromLocalEst[1]) {
+      return sanitizeSegment(normalizeLocalToken(fromLocalEst[1]), 'N/I');
+    }
+
+    const fromLocalTrecho = local.match(/-([A-Z0-9]{2,}_[A-Z0-9]{2,})$/i);
+    if (fromLocalTrecho && fromLocalTrecho[1]) {
+      return sanitizeSegment(normalizeLocalToken(fromLocalTrecho[1]), 'N/I');
+    }
+
+    const fromLocalIdTrecho = localId.match(/([A-Z0-9]{2,}_[A-Z0-9]{2,})/i);
+    if (fromLocalIdTrecho && fromLocalIdTrecho[1]) {
+      return sanitizeSegment(normalizeLocalToken(fromLocalIdTrecho[1]), 'N/I');
+    }
+
+    const estacao = readDescricaoCampo(descricao, 'Estacao') || readDescricaoCampo(descricao, 'Estação');
+    const estacaoSigla = String(estacao || '').match(/\(([A-Za-z0-9_\-]{2,})\)\s*$/);
+    if (estacaoSigla && estacaoSigla[1]) {
+      return sanitizeSegment(normalizeLocalToken(estacaoSigla[1]), 'N/I');
+    }
+
+    const trecho = readDescricaoCampo(descricao, 'Trecho');
+    const trechoCode = String(trecho || '').match(/([A-Za-z0-9]{2,}_[A-Za-z0-9]{2,})/);
+    if (trechoCode && trechoCode[1]) {
+      return sanitizeSegment(normalizeLocalToken(trechoCode[1]), 'N/I');
+    }
+
+    return 'N/I';
+  }
+
+  function formatDataHoraBrasilNota(dateObj = new Date()) {
+    const parts = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(dateObj);
+
+    const byType = {};
+    parts.forEach(p => { byType[p.type] = p.value; });
+
+    const dd = byType.day || '00';
+    const mm = byType.month || '00';
+    const yyyy = byType.year || '0000';
+    const hh = byType.hour || '00';
+    const mi = byType.minute || '00';
+    const ss = byType.second || '00';
+    return `${dd}.${mm}.${yyyy} ${hh}:${mi}:${ss} BRAZIL (S-SAF-TRIVIA)`;
+  }
+
+  function nomeLinhaOficial(linha) {
+    const map = {
+      '11': 'CORAL',
+      '12': 'SAFIRA',
+      '13': 'JADE',
+    };
+    const cod = String(linha || '').trim();
+    if (!cod) return 'LINHA N/I';
+    const nome = map[cod] || '';
+    return nome ? `LINHA ${cod} - ${nome}` : `LINHA ${cod}`;
+  }
+
+  function tipoLocalBySistema(sistemaId) {
+    const sid = String(sistemaId || '').trim();
+    if (sid === '1') return 'MRO';
+    if (['2', '5', '7', '8'].includes(sid)) return 'Estação';
+    if (['3', '4', '6'].includes(sid)) return 'Via';
+    return 'N/I';
+  }
+
+  function resolverLocalDetalhado(item, tipoLocal) {
+    if (tipoLocal === 'Estação') {
+      const estRef = estacaoById.get(String(item.local_instalacao_id || '').trim()) || {};
+      const descricao = String(item?.descricao_longa || '');
+      const estCampo = readDescricaoCampo(descricao, 'Estacao') || readDescricaoCampo(descricao, 'Estação');
+      const siglaByCampo = String(estCampo || '').match(/\(([A-Za-z0-9_\-]{2,})\)\s*$/);
+      const nomeByCampo = String(estCampo || '').replace(/\s*\([^)]+\)\s*$/, '').trim();
+
+      const sigla = (siglaByCampo && siglaByCampo[1])
+        ? normalizeLocalToken(siglaByCampo[1])
+        : normalizeLocalToken(estRef.sigla || resolverLocalCurto(item));
+      const nome = String(nomeByCampo || estRef.estacao || item._estacao || '').trim();
+
+      if (sigla && nome) return `${sigla} - ${nome}`;
+      if (sigla) return sigla;
+      if (nome) return nome;
+      return 'N/I';
+    }
+
+    if (tipoLocal === 'Via') {
+      return sanitizeSegment(resolverLocalCurto(item), 'N/I');
+    }
+
+    if (tipoLocal === 'MRO') {
+      const trem = readDescricaoCampo(String(item?.descricao_longa || ''), 'Trem');
+      return sanitizeSegment(trem || item?.local_instalacao || item?.equipamento || '', 'N/I');
+    }
+
+    return sanitizeSegment(resolverLocalCurto(item), 'N/I');
+  }
+
+  async function listarSubsistemasPorSistemaCached(sistemaId) {
+    const sid = String(sistemaId || '').trim();
+    if (!sid) return [];
+
+    const cached = subsistemasPorSistemaCache.get(sid);
+    if (cached) return cached;
+
+    const res = await API.subsistemas(Number(sid));
+    const lista = res.ok ? (res.data?.subsistemas || []) : [];
+    subsistemasPorSistemaCache.set(sid, lista);
+    return lista;
+  }
+
+  async function resolverSubsistemaPorContexto(item, sistemaId) {
+    if (!sistemaId) return { id: '', codigo: '' };
+
+    const lista = await listarSubsistemasPorSistemaCached(sistemaId);
+    if (!lista.length) return { id: '', codigo: '' };
+
+    const fromItem = String(item?.subsistema_id || '').trim();
+    if (fromItem) {
+      const byId = lista.find(s => String(s.id || '').trim() === fromItem);
+      if (byId) {
+        return {
+          id: String(byId.id || '').trim(),
+          codigo: String(byId.codigo || '').trim(),
+        };
+      }
+    }
+
+    const subsistemaTexto = readDescricaoCampo(item?.descricao_longa, 'Subsistema');
+    if (!subsistemaTexto) return { id: '', codigo: '' };
+
+    const textoNorm = normalizeKey(subsistemaTexto);
+    const textoHead = normalizeKey(String(subsistemaTexto).split('-')[0]);
+    const match = lista.find(s => {
+      const codigoNorm = normalizeKey(s.codigo || '');
+      const nomeNorm = normalizeKey(s.nome || '');
+      if (codigoNorm && (textoHead === codigoNorm || textoNorm.startsWith(codigoNorm))) return true;
+      if (nomeNorm && textoNorm.includes(nomeNorm)) return true;
+      return false;
+    });
+
+    return match
+      ? { id: String(match.id || '').trim(), codigo: String(match.codigo || '').trim() }
+      : { id: '', codigo: '' };
+  }
+
+  function contextoTextoBreve(item) {
+    const descricao = String(item?.descricao_longa || '');
+    const trem = readDescricaoCampo(descricao, 'Trem');
+    const viaNumero = String(item?.via_numero || readDescricaoCampo(descricao, 'Via') || '').trim();
+    const kmInicial = String(item?.km_inicial || readDescricaoCampo(descricao, 'KM Inicial') || '').trim();
+
+    return {
+      sistemaId: inferSistemaId(item),
+      subs3: sanitizeSegment(item?._subsistemaCodigo3 || '', 'N/I'),
+      localCurto: resolverLocalCurto(item),
+      trem: sanitizeSegment(trem, 'TREM'),
+      viaNumero: sanitizeSegment(viaNumero, 'N/I'),
+      kmInicial: sanitizeSegment(kmInicial, 'N/I'),
+    };
+  }
+
+  function normalizeKey(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  async function carregarSintomasPorSistemaSubsistema(item) {
+    const sistemaId = inferSistemaId(item);
+    if (!sistemaId) return [];
+
+    const subsistema = await resolverSubsistemaPorContexto(item, sistemaId);
+    const subsistemaId = subsistema.id;
+    item._subsistemaCodigo3 = codigo3FromSubsistemaCodigo(subsistema.codigo);
+
+    const res = await API.falhas({
+      sistema_id: sistemaId,
+      subsistema_id: subsistemaId || undefined,
+    });
+
+    if (!res.ok) return [];
+
+    const falhas = res.data?.falhas || [];
+    return falhas
+      .map(f => ({
+        id: String(f.id || '').trim(),
+        descricao: String(f.descricao || '').trim(),
+        codigo: String(f.grupo_codigo || '').trim(),
+      }))
+      .filter(f => f.id && f.descricao);
+  }
+
+  function montarTextoBreveNota(item, tipoNota, sintomaDescricao) {
+    const ctx = contextoTextoBreve(item);
+    const sistemaId = String(ctx.sistemaId || '').trim();
+    const sintoma = sanitizeSegment(sintomaDescricao || item.titulo_falha || 'Falha');
+
+    if (sistemaId === '1') {
+      return `${ctx.trem} - ${sintoma}`.slice(0, 500);
+    }
+    if (['2', '5', '7', '8'].includes(sistemaId)) {
+      return `${ctx.subs3} - ${ctx.localCurto} - ${sintoma}`.slice(0, 500);
+    }
+    if (['3', '4'].includes(sistemaId)) {
+      return `${ctx.subs3} - ${ctx.localCurto} - ${ctx.kmInicial} - ${sintoma}`.slice(0, 500);
+    }
+    if (sistemaId === '6') {
+      return `${ctx.subs3} - ${ctx.localCurto} - VIA ${ctx.viaNumero} - ${ctx.kmInicial} - ${sintoma}`.slice(0, 500);
+    }
+
+    return `${ctx.subs3} - ${ctx.localCurto} - ${sintoma}`.slice(0, 500);
+  }
+
+  function montarTextoLongoNota(item, tipoNota, sintomaObj, sintomaDescricao) {
+    const sistemaId = inferSistemaId(item);
+    const tipoLocal = tipoLocalBySistema(sistemaId);
+    const linhaNumero = parseLinha(item);
+    const linhaOficial = nomeLinhaOficial(linhaNumero);
+    const localDetalhado = resolverLocalDetalhado(item, tipoLocal);
+    const equipamento = sanitizeSegment(item?.equipamento || 'N/I', 'N/I');
+    const sintoma = sanitizeSegment(sintomaDescricao || sintomaObj?.descricao || item?.titulo_falha || 'N/I', 'N/I');
+    const descricaoFalha = sanitizeSegment(
+      readDescricaoCampo(String(item?.descricao_longa || ''), 'Descricao') || String(item?.descricao_longa || ''),
+      'N/I'
+    );
+
+    const linhaPrincipal = formatDataHoraBrasilNota();
+    const linhaDetalhes = `LINHA: ${linhaOficial}, TIPO LOCAL: ${tipoLocal}, LOCAL: ${localDetalhado}, EQUIPAMENTO: ${equipamento}, SINTOMA: ${sintoma}, DESCRIÇÃO: ${descricaoFalha}`;
+
+    return `${linhaPrincipal}\n${linhaDetalhes}`;
+  }
+
+  function initModalSearchableSelect(sel, emptyMessage) {
+    if (!sel || sel.dataset.searchableInitialized === 'true') return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ccm-searchable-select';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control ccm-searchable-input';
+    input.autocomplete = 'off';
+    input.placeholder = '';
+
+    const menu = document.createElement('div');
+    menu.className = 'ccm-searchable-menu';
+    menu.style.display = 'none';
+
+    sel.classList.add('native-select-hidden');
+    sel.insertAdjacentElement('afterend', wrapper);
+    wrapper.appendChild(input);
+    wrapper.appendChild(menu);
+
+    function selectedLabel() {
+      const selected = sel.options[sel.selectedIndex];
+      return selected ? String(selected.text || '') : '';
+    }
+
+    function renderOptions(term = '') {
+      const filter = String(term || '').trim().toLowerCase();
+      const options = Array.from(sel.options)
+        .filter(opt => String(opt.value || '').trim() !== '')
+        .filter(opt => String(opt.text || '').toLowerCase().includes(filter));
+
+      if (!options.length) {
+        menu.innerHTML = `<div class="ccm-searchable-empty">${escHtml(emptyMessage || 'Nenhum item disponivel')}</div>`;
+        return;
+      }
+
+      menu.innerHTML = options.map(opt => {
+        const isActive = String(opt.value || '') === String(sel.value || '');
+        return `<div class="ccm-searchable-option${isActive ? ' active' : ''}" data-value="${escHtml(opt.value)}">${escHtml(opt.text)}</div>`;
+      }).join('');
+    }
+
+    function syncFromSelect() {
+      input.value = selectedLabel();
+      renderOptions(input.value);
+    }
+
+    input.addEventListener('focus', () => {
+      renderOptions(input.value);
+      menu.style.display = 'block';
+      input.select();
+    });
+
+    input.addEventListener('input', () => {
+      renderOptions(input.value);
+      menu.style.display = 'block';
+    });
+
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        menu.style.display = 'none';
+        input.value = selectedLabel();
+      }
+    });
+
+    menu.addEventListener('mousedown', event => {
+      const optionEl = event.target.closest('.ccm-searchable-option');
+      if (!optionEl) return;
+      const value = optionEl.getAttribute('data-value') || '';
+      sel.value = value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      syncFromSelect();
+      menu.style.display = 'none';
+      event.preventDefault();
+    });
+
+    sel.addEventListener('change', syncFromSelect);
+
+    document.addEventListener('click', function closeOutside(event) {
+      if (!event.target.closest('.ccm-searchable-select')) {
+        menu.style.display = 'none';
+      }
+    });
+
+    sel.dataset.searchableInitialized = 'true';
+    syncFromSelect();
+  }
+
+  async function carregarCentrosTrabalhoModal() {
+    const sel = document.getElementById('aceite-centro-trabalho');
+    if (!sel) return;
+
+    initModalSearchableSelect(sel, 'Nenhum centro disponivel');
+
+    if (!centrosTrabalhoCache.length) {
+      const res = await API.centrosTrabalho();
+      if (res.ok) {
+        centrosTrabalhoCache = (res.data?.centros || []).map(c => ({
+          codigo: String(c.codigo || '').trim(),
+          denominacao: String(c.denominacao || '').trim(),
+        })).filter(c => c.codigo);
+      }
+    }
+
+    sel.innerHTML = centrosTrabalhoCache
+      .map(c => `<option value="${escHtml(c.codigo)}">${escHtml(c.codigo)} - ${escHtml(c.denominacao || '')}</option>`)
+      .join('');
+    sel.value = '';
+
+    if (sel.dataset.searchableInitialized === 'true') {
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  async function carregarSintomasModal(item, sintomaPreSelecionado) {
+    const sel = document.getElementById('aceite-sintoma');
+    if (!sel) return;
+    initModalSearchableSelect(sel, 'Nenhum sintoma disponivel para sistema/subsistema');
+    sel.innerHTML = '';
+    sel.value = '';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    sintomasModalCache = [];
+
+    let sintomas = [];
+    try {
+      sintomas = await carregarSintomasPorSistemaSubsistema(item);
+    } catch (_err) {
+      sintomas = [];
+    }
+
+    if (!sintomas.length) {
+      const equipamentoId = String(item?.equipamento_id || '').trim();
+      if (equipamentoId) {
+        const res = await API.sintomas(equipamentoId);
+        if (res.ok) {
+          sintomas = (res.data?.sintomas || []).map(s => ({
+            id: String(s.id || '').trim(),
+            descricao: String(s.descricao || '').trim(),
+            codigo: String(s.codigo || '').trim(),
+          })).filter(s => s.id);
+        }
+      }
+    }
+
+    sintomasModalCache = sintomas;
+
+    if (!sintomasModalCache.length) {
+      sel.innerHTML = '';
+      sel.value = '';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
+
+    sel.innerHTML = sintomasModalCache
+      .map(s => `<option value="${escHtml(s.id)}">${escHtml(s.descricao)}${s.codigo ? ` (${escHtml(s.codigo)})` : ''}</option>`)
+      .join('');
+
+    if (sintomaPreSelecionado && sintomasModalCache.some(s => s.id === sintomaPreSelecionado)) {
+      sel.value = sintomaPreSelecionado;
+    } else {
+      sel.value = '';
+    }
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function preencherTextosSugestao(force = false) {
+    if (!aceiteSafAtual) return;
+    const tipoNota = document.getElementById('aceite-tipo-nota')?.value || 'YE';
+    const sintomaSel = document.getElementById('aceite-sintoma');
+    const sintomaId = sintomaSel?.value || '';
+    const sintomaObj = sintomasModalCache.find(s => s.id === sintomaId);
+    const sintomaDescricao = sintomaObj?.descricao || 'Sintoma nao informado';
+
+    const breve = document.getElementById('aceite-texto-breve');
+    const longo = document.getElementById('aceite-texto-longo');
+    if (breve && (force || !String(breve.value || '').trim())) {
+      breve.value = montarTextoBreveNota(aceiteSafAtual, tipoNota, sintomaDescricao);
+    }
+    if (longo && (force || !String(longo.value || '').trim())) {
+      longo.value = montarTextoLongoNota(aceiteSafAtual, tipoNota, sintomaObj, sintomaDescricao);
+    }
+  }
+
+  function abrirModalAceite() {
+    document.getElementById('modal-aceite-ccm')?.classList.add('open');
+  }
+
+  function fecharModalAceite() {
+    document.getElementById('modal-aceite-ccm')?.classList.remove('open');
+    aceiteSafAtual = null;
+    aceiteIdsDuplicadas = [];
+    sintomasModalCache = [];
+  }
+
+  async function mostrarAceite(id, options = {}) {
+    const item = allSafs.find(s => String(s.id) === String(id));
+    if (!item) {
+      Toast.error('SAF nao encontrada para aceite.');
+      return;
+    }
+
+    aceiteSafAtual = item;
+    aceiteIdsDuplicadas = Array.isArray(options.idsDuplicatas)
+      ? options.idsDuplicatas.map(String).filter(Boolean)
+      : [];
+    await carregarCentrosTrabalhoModal();
+
+    const tipoNotaEl = document.getElementById('aceite-tipo-nota');
+    const centroEl = document.getElementById('aceite-centro-trabalho');
+    const breveEl = document.getElementById('aceite-texto-breve');
+    const longoEl = document.getElementById('aceite-texto-longo');
+    const notaEl = document.getElementById('aceite-numero-nota');
+    const ordemEl = document.getElementById('aceite-numero-ordem');
+
+    if (tipoNotaEl) tipoNotaEl.value = (item.tipo_nota || 'YE').toUpperCase() === 'YP' ? 'YP' : 'YE';
+    if (centroEl) {
+      centroEl.value = item.ccm_centro_trabalho || '';
+      centroEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (breveEl) breveEl.value = item.ccm_texto_breve_nota || item.saf_integracao_sap?.texto_breve_nota || '';
+    if (longoEl) longoEl.value = item.ccm_texto_longo_nota || item.saf_integracao_sap?.texto_longo_nota || '';
+    if (notaEl) notaEl.value = item.ccm_numero_nota || item.saf_integracao_sap?.qmnum || item.qmnum_duplicata || '';
+    if (ordemEl) ordemEl.value = item.ccm_numero_ordem || item.saf_integracao_sap?.aufnr || item.saf_integracao_sap?.numero_ordem_sap || '';
+
+    await carregarSintomasModal(item, String(item.sintoma_id || '').trim());
+    preencherTextosSugestao();
+    abrirModalAceite();
   }
 
   async function aceitar(id) {
     const user = Auth.getUser();
-    const tipoNota = document.getElementById('tipo-nota-' + id)?.value || 'YP';
-    const nivelSelecionado = document.querySelector(`input[name="crit-${id}"]:checked`)?.value || '2';
-    const prioridade = nivelToPrioridade(nivelSelecionado);
-    const actDiv = document.getElementById('actions-' + id);
-    if (actDiv) actDiv.innerHTML = `<div class="spinner" style="width:18px;height:18px;"></div>`;
-
-    const res = await API.avaliarSaf(id, { status: 'APROVADA', avaliador_id: user?.id, tipo_nota: tipoNota, prioridade });
-    if (!res.ok) {
-      Toast.error(res.data.erro || 'Erro ao aceitar a SAF.');
-      renderQueue();
+    const item = allSafs.find(s => String(s.id) === String(id));
+    if (!item) {
+      Toast.error('SAF nao encontrada para gravacao.');
       return;
     }
-    const item = allSafs.find(s => s.id === id);
-    if (item) {
-      item.status = 'APROVADA';
-      const qmnum = res.data.qmnum;
-      if (qmnum) {
-        item.saf_integracao_sap = { qmnum, tipo_nota: tipoNota, status_integracao: 'SUCESSO' };
-        const nDup = res.data.duplicatas || 0;
-        const dupMsg = nDup > 0 ? ` ${nDup} duplicata(s) encerrada(s).` : '';
-        Toast.success(`SAF aceita! Nota ${tipoNota} criada no SAP: ${qmnum}.${dupMsg}`);
-        // Atualiza duplicatas em memória (mesmo equip + mesmo sintoma)
-        if (nDup > 0) {
-          allSafs.forEach(s => {
-            if (s.id !== id && s.status === 'ABERTA' &&
-                s.equipamento_id === item.equipamento_id &&
-                s.sintoma_id     === item.sintoma_id) {
-              s.status = 'DUPLICADA';
-              s.qmnum_duplicata = qmnum;
-            }
-          });
-        }
-      } else if (res.data.aviso_sap) {
-        item.saf_integracao_sap = { status_integracao: 'ERRO', mensagem_erro: res.data.aviso_sap };
-        Toast.warning(`SAF aceita, mas erro no SAP: ${res.data.aviso_sap}`);
-      } else {
-        item.saf_integracao_sap = { status_integracao: 'PENDENTE' };
-        Toast.success(`SAF aceita! Nota ${tipoNota} enviada ao SAP.`);
-      }
+
+    const tipoNota = (document.getElementById('aceite-tipo-nota')?.value || 'YE').toUpperCase();
+    const sintomaId = (document.getElementById('aceite-sintoma')?.value || '').trim();
+    const textoBreve = (document.getElementById('aceite-texto-breve')?.value || '').trim();
+    const textoLongo = (document.getElementById('aceite-texto-longo')?.value || '').trim();
+    const qmnum = (document.getElementById('aceite-numero-nota')?.value || '').trim();
+    const aufnr = (document.getElementById('aceite-numero-ordem')?.value || '').trim();
+    const centroTrabalho = (document.getElementById('aceite-centro-trabalho')?.value || '').trim();
+
+    if (!centroTrabalho) {
+      Toast.warning('Selecione o centro de trabalho.');
+      return;
     }
+    if (!sintomaId) {
+      Toast.warning('Selecione o sintoma da falha.');
+      return;
+    }
+    if (!textoBreve) {
+      Toast.warning('Informe o texto breve da nota.');
+      return;
+    }
+    if (!textoLongo) {
+      Toast.warning('Informe o texto longo da nota.');
+      return;
+    }
+
+    const nivelSelecionado = document.querySelector(`input[name="crit-${id}"]:checked`)?.value || '2';
+    const prioridade = nivelToPrioridade(nivelSelecionado);
+    const gravarBtn = document.getElementById('btn-gravar-modal-aceite');
+    if (gravarBtn) {
+      gravarBtn.disabled = true;
+      gravarBtn.textContent = 'Gravando...';
+    }
+
+    const idsDuplicatas = aceiteIdsDuplicadas
+      .map(String)
+      .filter(Boolean)
+      .filter(itemId => itemId !== String(id));
+
+    const res = await API.avaliarSaf(id, {
+      status: 'APROVADA',
+      avaliador_id: user?.id,
+      tipo_nota: tipoNota,
+      prioridade,
+      centro_trabalho: centroTrabalho,
+      sintoma_id: sintomaId,
+      texto_breve_nota: textoBreve,
+      texto_longo_nota: textoLongo,
+      qmnum,
+      aufnr,
+      ids_duplicatas: idsDuplicatas,
+    });
+
+    if (gravarBtn) {
+      gravarBtn.disabled = false;
+      gravarBtn.textContent = 'Gravar';
+    }
+
+    if (!res.ok) {
+      Toast.error(res.data.erro || 'Erro ao aceitar a SAF.');
+      return;
+    }
+
+    item.status = 'APROVADA';
+    item.tipo_nota = tipoNota;
+    item.sintoma_id = sintomaId;
+    item.ccm_texto_breve_nota = textoBreve;
+    item.ccm_texto_longo_nota = textoLongo;
+    item.ccm_numero_nota = qmnum;
+    item.ccm_numero_ordem = aufnr;
+    item.ccm_centro_trabalho = centroTrabalho;
+    item.saf_integracao_sap = {
+      ...(item.saf_integracao_sap || {}),
+      qmnum: qmnum || null,
+      aufnr: aufnr || null,
+      numero_ordem_sap: aufnr || null,
+      tipo_nota: tipoNota,
+      texto_breve_nota: textoBreve,
+      texto_longo_nota: textoLongo,
+      status_integracao: qmnum ? 'SUCESSO' : 'PENDENTE',
+    };
+
+    const nDup = res.data.duplicatas || 0;
+    if (nDup > 0) {
+      const idsParaAtualizar = new Set(idsDuplicatas.map(String));
+      allSafs.forEach(s => {
+        if (!idsParaAtualizar.has(String(s.id))) return;
+        s.status = 'APROVADA';
+        s.is_duplicada = true;
+        s.qmnum_duplicata = qmnum || res.data.qmnum || null;
+        s.tipo_nota = tipoNota;
+        s.ccm_texto_breve_nota = textoBreve;
+        s.ccm_texto_longo_nota = textoLongo;
+        s.ccm_numero_nota = qmnum;
+        s.ccm_numero_ordem = aufnr;
+        s.ccm_centro_trabalho = centroTrabalho;
+      });
+    }
+
+    fecharModalAceite();
     updateStats();
     renderQueue();
+    Toast.success(`SAF aceita e dados SAP gravados.${nDup > 0 ? ` ${nDup} duplicata(s) atualizada(s).` : ''}`);
   }
 
   function mostrarRecusa(id) {
@@ -1067,31 +2084,31 @@
     Toast.success('SAF devolvida ao solicitante.');
   }
 
-  function toggleDuplicadoGroup(equip) {
-    const hasOpen = allSafs.some(s => s.status === 'ABERTA' && (s.equipamento || s.titulo_falha || 'Sem Equipamento') === equip);
+  function toggleDuplicadoGroup(groupKey) {
+    const hasOpen = allSafs.some(s => s.status === 'ABERTA' && groupMatches(s, groupKey));
     if (!hasOpen) {
-      Toast.warning('Nao ha ordens abertas para este equipamento.');
+      Toast.warning('Nao ha ordens abertas neste grupo.');
       return;
     }
 
-    if (duplicateModeGroups.has(equip)) {
-      duplicateModeGroups.delete(equip);
-      duplicateSelections.delete(equip);
+    if (duplicateModeGroups.has(groupKey)) {
+      duplicateModeGroups.delete(groupKey);
+      duplicateSelections.delete(groupKey);
     } else {
-      duplicateModeGroups.add(equip);
+      duplicateModeGroups.add(groupKey);
     }
     renderQueue();
   }
 
-  function toggleDuplicadaItem(id, equipEncoded, checked) {
-    const equip = decodeURIComponent(equipEncoded || '');
-    const set = getSelectionSet(equip);
+  function toggleDuplicadaItem(id, groupEncoded, checked) {
+    const groupKey = decodeURIComponent(groupEncoded || '');
+    const set = getSelectionSet(groupKey);
     if (checked) set.add(id);
     else set.delete(id);
     renderQueue();
   }
 
-  async function executarDuplicadasGrupo(equip, idsLote) {
+  async function executarDuplicadasGrupo(groupKey, idsLote) {
     const user = Auth.getUser();
     const res = await API.duplicarLote(idsLote, user?.id);
     if (!res.ok) {
@@ -1107,17 +2124,17 @@
       }
     });
 
-    duplicateSelections.delete(equip);
-    duplicateModeGroups.delete(equip);
+    duplicateSelections.delete(groupKey);
+    duplicateModeGroups.delete(groupKey);
     updateStats();
     renderQueue();
     Toast.success(`${res.data.total_marcado || marcados.size} ordem(ns) marcadas como duplicadas.`);
   }
 
-  function confirmarDuplicadasGrupo(equip) {
-    const selecionados = getSelectionSet(equip);
+  function confirmarDuplicadasGrupo(groupKey) {
+    const selecionados = getSelectionSet(groupKey);
     const idsLote = allSafs
-      .filter(s => s.status === 'ABERTA' && (s.equipamento || s.titulo_falha || 'Sem Equipamento') === equip && selecionados.has(s.id))
+      .filter(s => s.status === 'ABERTA' && groupMatches(s, groupKey) && selecionados.has(s.id))
       .map(s => s.id);
 
     if (!idsLote.length) {
@@ -1125,17 +2142,8 @@
       return;
     }
 
-    ConfirmModal.show({
-      title: 'Confirmar duplicadas',
-      message: `
-        <div style="font-size:.9rem;color:var(--text);line-height:1.5;">
-          <p style="margin:0 0 .45rem;">Voce esta prestes a marcar <strong>${idsLote.length}</strong> ordem(ns) como <strong>Duplicada</strong>.</p>
-          <p style="margin:0;">Deseja continuar?</p>
-        </div>`,
-      confirmText: 'Sim, marcar duplicadas',
-      confirmClass: 'btn-warning',
-      onConfirm: () => { executarDuplicadasGrupo(equip, idsLote); },
-    });
+    const primeiroId = idsLote[0];
+    mostrarAceite(primeiroId, { idsDuplicatas: idsLote });
   }
 
   async function toggleSap(id, currentVal) {
@@ -1194,7 +2202,9 @@
       }
       return;
     }
-    allSafs = (res.data || []).map(enrichSafForFilters);
+    const loadedSafs = (res.data || []).map(enrichSafForFilters);
+    notifyNewPendingSafs(loadedSafs);
+    allSafs = loadedSafs;
     updateStats();
     syncFilterControls();
     renderQueue();
@@ -1212,6 +2222,10 @@
     if (!user) return;
 
     Permissions.requestAll();
+    initDateRangePicker();
+    document.addEventListener('click', unlockNotificationAudio);
+    document.addEventListener('keydown', unlockNotificationAudio);
+    document.addEventListener('touchstart', unlockNotificationAudio);
 
     document.querySelectorAll('.filter-tab').forEach(tab => {
       tab.addEventListener('click', function () {
@@ -1234,26 +2248,73 @@
       renderQueue();
     });
 
-    document.getElementById('date-from-filter')?.addEventListener('change', function () {
-      activeDateFrom = this.value || '';
-      renderQueue();
-    });
-
-    document.getElementById('date-to-filter')?.addEventListener('change', function () {
-      activeDateTo = this.value || '';
+    document.getElementById('order-number-filter')?.addEventListener('input', function () {
+      activeOrderSearch = this.value || '';
       renderQueue();
     });
 
     document.getElementById('btn-clear-ccm-filters')?.addEventListener('click', function () {
       activeLine = '';
       activeStation = '';
+      activeOrderSearch = '';
       activeDateFrom = '';
       activeDateTo = '';
       syncFilterControls();
       renderQueue();
     });
 
-    document.getElementById('btn-refresh').addEventListener('click', () => {
+    document.getElementById('btn-close-modal-aceite')?.addEventListener('click', fecharModalAceite);
+    document.getElementById('btn-cancelar-modal-aceite')?.addEventListener('click', fecharModalAceite);
+
+    document.getElementById('modal-aceite-ccm')?.addEventListener('click', function (e) {
+      if (e.target === this) fecharModalAceite();
+    });
+
+    document.getElementById('aceite-tipo-nota')?.addEventListener('change', function () {
+      preencherTextosSugestao(true);
+    });
+
+    document.getElementById('aceite-sintoma')?.addEventListener('change', function () {
+      preencherTextosSugestao(true);
+    });
+
+    document.getElementById('btn-copy-texto-breve')?.addEventListener('click', async function () {
+      const valor = document.getElementById('aceite-texto-breve')?.value || '';
+      if (!valor.trim()) {
+        Toast.warning('Nao ha texto breve para copiar.');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(valor);
+        Toast.success('Texto breve copiado.');
+      } catch (_err) {
+        Toast.error('Nao foi possivel copiar o texto breve.');
+      }
+    });
+
+    document.getElementById('btn-copy-texto-longo')?.addEventListener('click', async function () {
+      const valor = document.getElementById('aceite-texto-longo')?.value || '';
+      if (!valor.trim()) {
+        Toast.warning('Nao ha texto longo para copiar.');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(valor);
+        Toast.success('Texto longo copiado.');
+      } catch (_err) {
+        Toast.error('Nao foi possivel copiar o texto longo.');
+      }
+    });
+
+    document.getElementById('btn-gravar-modal-aceite')?.addEventListener('click', function () {
+      if (!aceiteSafAtual?.id) {
+        Toast.error('Nenhuma SAF selecionada para gravacao.');
+        return;
+      }
+      aceitar(aceiteSafAtual.id);
+    });
+
+    document.getElementById('btn-refresh')?.addEventListener('click', () => {
       loadQueue(false);
     });
 

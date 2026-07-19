@@ -113,18 +113,18 @@ serve(async (_req) => {
       codigosEquipSAP.add(codigo);
 
       // Busca ID do local no cache
-      let localId: number | null = null;
+      let localIdSap: string | null = null;
       if (tplnr) {
         const { data } = await supabase
           .from("locais_instalacao")
-          .select("id")
-          .eq("codigo", tplnr)
+          .select("id_sap")
+          .eq("id_sap", tplnr)
           .maybeSingle();
-        localId = data?.id ?? null;
+        localIdSap = data?.id_sap ?? null;
       }
 
       await supabase.from("equipamentos").upsert(
-        { id_sap: codigo, codigo, descricao, local_instalacao_id: localId, ativo: true, sincronizado_em: now },
+        { id_sap: codigo, codigo, descricao, local_id_sap: localIdSap ?? tplnr ?? "", ativo: true, sincronizado_em: now },
         { onConflict: "id_sap" }
       );
       equipSync++;
@@ -164,8 +164,8 @@ serve(async (_req) => {
         codigosSintSAP.add(codigo);
 
         await supabase.from("sintomas_catalogo").upsert(
-          { id_sap: codigo, codigo, grupo, codigo_item: codigoItem, descricao, tipo_catalogo: "C", ativo: true, sincronizado_em: now },
-          { onConflict: "id_sap" }
+          { codigo, grupo, codigo_item: codigoItem, descricao, tipo_catalogo: "C", ativo: true, sincronizado_em: now },
+          { onConflict: "codigo" }
         );
         sintSync++;
       }

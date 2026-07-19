@@ -1,0 +1,61 @@
+# ──────────────────────────────────────────────────────────────
+# Supabase
+# ──────────────────────────────────────────────────────────────
+SUPABASE_URL=https://qobzqtgpgeugmtsjcinc.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvYnpxdGdwZ2V1Z210c2pjaW5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxNTE2OTEsImV4cCI6MjA5MjcyNzY5MX0.TRsQjvElvC0IIxQgqtAL8Gvj6KiuBKv-jAAckYoqBx0
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvYnpxdGdwZ2V1Z210c2pjaW5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzE1MTY5MSwiZXhwIjoyMDkyNzI3NjkxfQ.7bHUc5IXHiSrgtnBVuQvbsMFRA4HdstcYOsZkyRIMk0
+
+# ──────────────────────────────────────────────────────────────
+# SAP Gateway (REST / OData)
+# ──────────────────────────────────────────────────────────────
+
+# Modo Mock — simula respostas do SAP sem conexão real (para testes)
+# Defina como true enquanto o SAP não estiver disponível.
+# Com true, sap_criar_nota retorna um QMNUM fictício, sap_cancelar_nota
+# e sap_consultar_nota retornam respostas simuladas. Nenhum HTTP é feito ao SAP.
+SAP_MOCK_MODE=true
+
+# URL base do servidor SAP (sem barra final)
+# Ex: https://sap.suaempresa.com.br:443  ou  http://10.0.1.50:8000
+SAP_BASE_URL=https://SEU_SAP_HOST:443
+
+# Mandante/Client SAP (geralmente 100, 200 ou 300)
+SAP_CLIENT=100
+
+# Usuário técnico com permissão de leitura/escrita na PM
+SAP_USER=SAF_TECNICO
+
+# Senha do usuário técnico SAP
+SAP_PASSWORD=SUA_SENHA_SAP
+
+# Verificar certificado SSL do SAP? (true/false)
+# Coloque false se o SAP usa certificado auto-assinado (comum em ambientes internos)
+SAP_VERIFY_SSL=false
+
+# ── Endpoints SAP (opcionais — use para substituir os padrões OData) ──────────
+# Deixe em branco para usar os endpoints padrão API_MAINTNOTIFICATION / API_FUNCTLOCATION_SRV
+
+# POST — cria Nota de Manutenção (BAPI_ALM_NOTIF_CREATE equivalente)
+SAP_ENDPOINT_CRIAR_NOTA=
+
+# POST — cancela Nota de Manutenção (BAPI_ALM_NOTIF_CLOSE equivalente)
+SAP_ENDPOINT_CANCELAR_NOTA=
+
+# GET — consulta dados de uma Nota (status JEST-STAT + Ordem AUFNR)
+SAP_ENDPOINT_CONSULTAR_NOTA=
+
+# GET — lista Locais de Instalação ativos (IL03 / API_FUNCTLOCATION_SRV)
+SAP_ENDPOINT_LOCAIS=
+
+# GET — lista Equipamentos (IE03 / API_EQUIPMENT_SRV)
+SAP_ENDPOINT_EQUIPAMENTOS=
+
+# GET — lista Catálogo Tipo C / Sintomas (API_MAINTNOTIFICATION)
+SAP_ENDPOINT_SINTOMAS=
+
+# ──────────────────────────────────────────────────────────────
+# Flask
+# ──────────────────────────────────────────────────────────────
+FLASK_SECRET_KEY=troque-por-uma-chave-segura-aleatoria
+FLASK_DEBUG=1
+DEV_MODE=1

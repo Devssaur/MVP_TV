@@ -12,6 +12,7 @@ import os
 import base64
 import logging
 import random
+import re
 import requests
 from urllib.parse import urlparse
 
@@ -96,6 +97,69 @@ _PRIORIDADE_MAP = {
 }
 
 
+def _one_line(value: object) -> str:
+    return " ".join(str(value or "").strip().split())
+
+
+def _extract_linha(saf: dict) -> str:
+    linha = _one_line(saf.get("linha") or "")
+    if linha:
+        return linha
+
+    local = _one_line(saf.get("local_instalacao") or "")
+    if not local:
+        return ""
+
+    match = re.search(r"(?:^|\s)L(?:inha)?\s*(\d{1,2})(?:\b|\s)", local, flags=re.IGNORECASE)
+    if match and match.group(1):
+        return match.group(1)
+    return ""
+
+
+def _format_long_text_sap(saf: dict) -> str:
+    """Monta o Texto Longo SAP com rastreabilidade e campos em linhas separadas."""
+    numero_saf = _one_line(saf.get("ticket_saf") or saf.get("id") or "")
+    numero_ocorrencia = _one_line(
+        saf.get("numero_ocorrencia")
+        or saf.get("ocorrencia_numero")
+        or saf.get("id_ocorrencia")
+        or saf.get("id")
+        or "NAO INFORMADO"
+    )
+
+    linhas = [
+        f"Numero da SAF: {numero_saf or 'NAO INFORMADO'}",
+        f"Numero da Ocorrencia: {numero_ocorrencia}",
+        "Criador sistemico: S-SIGO-TRIVIA",
+    ]
+
+    linha = _extract_linha(saf)
+    local = _one_line(saf.get("local_instalacao"))
+    equipamento = _one_line(saf.get("equipamento"))
+    sintoma = _one_line(saf.get("sintoma_descricao") or saf.get("sintoma") or "")
+    descricao = _one_line(saf.get("descricao_longa") or saf.get("descricao_falha") or "")
+
+    campos = [
+        ("Linha", linha),
+        ("Centro de Trabalho", _one_line(saf.get("centro_trabalho"))),
+        ("Local", local),
+        ("Equipamento", equipamento),
+        ("Sintoma", sintoma),
+        ("Prioridade", _one_line(saf.get("prioridade"))),
+        ("Data inicio avaria", _one_line(saf.get("data_inicio_avaria"))),
+        ("Hora inicio avaria", _one_line(saf.get("hora_inicio_avaria"))),
+        ("Notificador", _one_line(saf.get("notificador_nome"))),
+        ("Area", _one_line(saf.get("notificador_area"))),
+        ("Descricao", descricao),
+    ]
+
+    for nome, valor in campos:
+        if valor:
+            linhas.append(f"{nome}: {valor}")
+
+    return "\n".join(linhas)
+
+
 # ──────────────────────────────────────────────────────────────
 # CRIAR NOTA DE MANUTENÇÃO  (BAPI_ALM_NOTIF_CREATE equivalente)
 # Endpoint: POST /sap/opu/odata/sap/API_MAINTNOTIFICATION/MaintenanceNotification
@@ -150,7 +214,7 @@ def sap_criar_nota(saf: dict) -> dict:
         "RequiredStartDate":    data_avaria,                          # STRMN
         "RequiredStartTime":    hora_avaria,                          # STRUR
         "ReportedByUser":       (saf.get("notificador_nome") or "")[:12],  # QMNAM (max 12)
-        "LongText":             saf.get("descricao_longa", ""),
+        "LongText":             _format_long_text_sap(saf),
     }
 
     # Sintoma/Dano: adiciona apenas se ambos os campos estiverem preenchidos (QMGRP + QMCOD)

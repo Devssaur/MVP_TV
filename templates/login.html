@@ -399,11 +399,12 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    const token = res.data.access_token || res.data.token;
     Auth.setUser({ id: res.data.id, nome: res.data.nome, perfil: res.data.perfil,
              usando_como: res.data.usando_como || res.data.perfil,
              empresa: res.data.empresa, area: res.data.area,
-             access_token: res.data.access_token });
-    const dest = { SOLICITANTE: '/minhassafs', CCM: '/filaccm', ADMIN: '/admin' };
+             access_token: token, token });
+    const dest = { SOLICITANTE: '/minhassafs', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
     const mode = (res.data.usando_como || res.data.perfil || '').toUpperCase();
     window.location.href = dest[mode] || '/minhassafs';
   });

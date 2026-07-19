@@ -32,12 +32,22 @@ def _get_service_supabase_client() -> Client:
 
 def _read_bearer_token() -> str:
     auth_header = (request.headers.get('Authorization') or '').strip()
-    if not auth_header.lower().startswith('bearer '):
-        raise AuthzError('Token de acesso ausente.')
-    token = auth_header[7:].strip()
-    if not token:
-        raise AuthzError('Token de acesso invalido.')
-    return token
+    if auth_header.lower().startswith('bearer '):
+        token = auth_header[7:].strip()
+        if token:
+            return token
+
+    token = (
+        request.headers.get('X-Access-Token')
+        or request.headers.get('X-Auth-Token')
+        or request.headers.get('token')
+        or request.args.get('token')
+        or request.args.get('access_token')
+    )
+    if token:
+        return str(token).strip()
+
+    raise AuthzError('Token de acesso ausente.')
 
 
 def get_current_user_context() -> dict[str, Any]:
@@ -74,11 +84,13 @@ def get_current_user_context() -> dict[str, Any]:
     if not perfil_data.get('aprovado'):
         raise AuthzError('Acesso pendente. Aguarde aprovacao do administrador.')
 
+    modo_atual = perfil_data.get('usando_como') or perfil_data.get('perfil')
+
     ctx = {
         'id': user_id,
         'email': getattr(auth_user, 'email', None),
         'perfil': perfil_data.get('perfil'),
-        'usando_como': perfil_data.get('usando_como') or perfil_data.get('perfil'),
+        'usando_como': modo_atual,
         'nome': perfil_data.get('nome'),
         'empresa': perfil_data.get('empresa'),
         'area': perfil_data.get('area'),
@@ -102,7 +114,8 @@ def require_auth(allowed_profiles: tuple[str, ...] | None = None) -> Callable:
             except Exception:
                 return _safe_error('Falha ao validar autenticacao.', 500)
 
-            if allowed_profiles and user.get('perfil') not in allowed_profiles:
+            perfil_efetivo = user.get('usando_como') or user.get('perfil')
+            if allowed_profiles and perfil_efetivo not in allowed_profiles:
                 return _safe_error('Acesso negado para este recurso.', 403)
             return fn(*args, **kwargs)
 

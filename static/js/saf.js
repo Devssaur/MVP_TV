@@ -3,19 +3,53 @@
  * Utilitários compartilhados (auth, API, formatação, UI)
  */
 
+function normalizeProfile(profile) {
+  return (profile || '').toString().trim().toUpperCase();
+}
+
+function getAllowedViewModes(profile) {
+  const normalizedProfile = normalizeProfile(profile);
+  if (normalizedProfile === 'ADMIN') return ['SOLICITANTE', 'CCM', 'SIC', 'ADMIN'];
+  if (normalizedProfile === 'CCM') return ['SOLICITANTE', 'CCM', 'SIC'];
+  return [normalizedProfile || 'SOLICITANTE'];
+}
+
+function getCurrentMode(user) {
+  const normalizedProfile = normalizeProfile(user?.perfil);
+  const storedMode = normalizeProfile(user?.usando_como);
+  const allowedModes = getAllowedViewModes(user?.perfil);
+  if (storedMode && allowedModes.includes(storedMode)) {
+    return storedMode;
+  }
+  return normalizedProfile || 'SOLICITANTE';
+}
+
 // =============================================
 // AUTH STATE (localStorage)
 // =============================================
 const Auth = (() => {
   const KEY = 'saf_user';
 
+  function normalizeUser(user) {
+    if (!user || typeof user !== 'object') return null;
+    const token = user.access_token || user.token || user?.session?.access_token || user?.session?.token;
+    const normalized = { ...user };
+    if (token) normalized.access_token = token;
+    if (!normalized.token && token) normalized.token = token;
+    return normalized;
+  }
+
   function getUser() {
-    try { return JSON.parse(localStorage.getItem(KEY)); }
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return null;
+      return normalizeUser(JSON.parse(raw));
+    }
     catch { return null; }
   }
 
   function setUser(user) {
-    localStorage.setItem(KEY, JSON.stringify(user));
+    localStorage.setItem(KEY, JSON.stringify(normalizeUser(user)));
   }
 
   function clearUser() {
@@ -29,9 +63,12 @@ const Auth = (() => {
       window.location.href = '/login';
       return null;
     }
-    const currentMode = (user.usando_como || user.perfil || '').toUpperCase();
-    const normalizedPerfil = (user.perfil || '').toUpperCase();
-    if (allowedProfiles && !allowedProfiles.includes(normalizedPerfil)) {
+    const currentMode = getCurrentMode(user);
+    const normalizedPerfil = normalizeProfile(user.perfil);
+    const normalizedAllowedProfiles = (allowedProfiles || []).map(profile => normalizeProfile(profile));
+    const isAllowedByView = normalizedAllowedProfiles.includes(currentMode);
+    const isAllowedByBaseProfile = normalizedAllowedProfiles.includes(normalizedPerfil);
+    if (allowedProfiles && !isAllowedByView && !isAllowedByBaseProfile) {
       window.location.href = '/acesso-negado';
       return null;
     }
@@ -44,7 +81,7 @@ const Auth = (() => {
       clearUser();
       return;
     }
-    const mode = (user.usando_como || user.perfil || '').toUpperCase();
+    const mode = getCurrentMode(user);
     const dest = { SOLICITANTE: '/novasaf', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
     window.location.href = dest[mode] || '/novasaf';
   }
@@ -58,21 +95,52 @@ const Auth = (() => {
 const API = (() => {
   const BASE = '/api';
 
+  function sanitizeBodyForLog(body) {
+    if (!body || typeof body !== 'object') return body;
+    const clone = { ...body };
+    if (clone.foto_base64) {
+      clone.foto_base64 = `<base64:${String(clone.foto_base64).length} chars>`;
+    }
+    return clone;
+  }
+
   async function request(method, path, body) {
     const currentUser = Auth.getUser();
+    const token = currentUser?.access_token || currentUser?.token;
     const opts = {
       method,
       headers: { 'Content-Type': 'application/json' }
     };
-    if (currentUser?.access_token) {
-      opts.headers.Authorization = `Bearer ${currentUser.access_token}`;
+    if (token) {
+      opts.headers.Authorization = `Bearer ${token}`;
+      opts.headers['X-Access-Token'] = token;
     }
     if (body !== undefined) opts.body = JSON.stringify(body);
     try {
       const res = await fetch(BASE + path, opts);
       const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('[API][ERROR]', {
+          method,
+          path,
+          status: res.status,
+          requestBody: sanitizeBodyForLog(body),
+          response: json,
+        });
+        if (res.status === 401) {
+          Auth.clearUser();
+          window.location.href = '/login';
+          return { ok: false, status: res.status, data: json };
+        }
+      }
       return { ok: res.ok, status: res.status, data: json };
     } catch (err) {
+      console.error('[API][NETWORK_ERROR]', {
+        method,
+        path,
+        requestBody: sanitizeBodyForLog(body),
+        error: err,
+      });
       return { ok: false, status: 0, data: { erro: 'Erro de conexão com o servidor.' } };
     }
   }
@@ -116,12 +184,46 @@ const API = (() => {
       if (linha) url += `?linha=${encodeURIComponent(linha)}`;
       return request('GET', url);
     },
+    subsistemas: (sistemaId) => {
+      let url = '/dados/subsistemas';
+      if (sistemaId != null && sistemaId !== '') {
+        url += `?sistema_id=${encodeURIComponent(sistemaId)}`;
+      }
+      return request('GET', url);
+    },
+    sistemasPorTipo: (tipo) => {
+      let url = '/dados/sistemas-por-tipo';
+      if (tipo) url += `?tipo=${encodeURIComponent(tipo)}`;
+      return request('GET', url);
+    },
+    prefetchFormulario: (tipo) => {
+      let url = '/dados/prefetch-formulario';
+      if (tipo) url += `?tipo=${encodeURIComponent(tipo)}`;
+      return request('GET', url);
+    },
+    falhas: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => {
+        if (v != null && String(v) !== '') qs.set(k, String(v));
+      });
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return request('GET', `/dados/falhas${suffix}`);
+    },
+    opcoesFormulario: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => {
+        if (v != null && String(v) !== '') qs.set(k, String(v));
+      });
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return request('GET', `/dados/opcoes-formulario${suffix}`);
+    },
     equipamentos: (lid, categoria)  => {
       let url = `/dados/equipamentos/${lid}`;
       if (categoria) url += `?categoria=${encodeURIComponent(categoria)}`;
       return request('GET', url);
     },
     sintomas:     (eid)  => request('GET', `/dados/sintomas/${eid}`),
+    centrosTrabalho: ()  => request('GET', '/dados/centros-trabalho'),
 
     // Admin
     logs:             ()               => request('GET',  '/admin/logs'),
@@ -154,7 +256,12 @@ const Fmt = (() => {
     CANCELADA:   'badge-cancelada',
     DUPLICADA:   'badge-cancelada',
   };
-  const PRIO_LABEL = { BAIXA: 'Baixa', MEDIA: 'Média', ALTA: 'Alta', CRITICA: 'Crítica' };
+  const PRIO_LABEL = {
+    BAIXA: '4 - ATENDIMENTO PROGRAMÁVEL (PCM)',
+    MEDIA: '3 - IMPACTO CONTRATUAL (INDICADORES EST e MRO)',
+    ALTA: '2 - SUPRESSÃO CONSEQUENTE (OPERAÇÃO DEGRADADA)',
+    CRITICA: '1 - BAIXA IMEDIATA DE SERVIÇO (TREM PARADO)'
+  };
   const PRIO_CLASS = { BAIXA: 'badge-baixa', MEDIA: 'badge-media', ALTA: 'badge-alta', CRITICA: 'badge-critica' };
 
   function statusBadge(s) {
@@ -281,12 +388,12 @@ function setupToolbar() {
   const perfil = document.getElementById('toolbar-perfil');
   if (perfil) {
     const labels = { SOLICITANTE: 'Solicitante', CCM: 'CCM', ADMIN: 'Administrador', SIC: 'SIC' };
-    const mode = (user.usando_como || user.perfil || '').toUpperCase();
+    const mode = getCurrentMode(user);
     perfil.textContent = labels[mode] || user.perfil;
   }
 
   // SOLICITANTE: "Minhas SAFs" tab is in the sidebar, not the nav bar
-  if ((user.usando_como || user.perfil || '').toUpperCase() === 'SOLICITANTE') {
+  if (getCurrentMode(user) === 'SOLICITANTE') {
     document.querySelectorAll('.nav-tab[href="/minhassafs"]').forEach(el => el.remove());
   }
 
@@ -332,7 +439,7 @@ function _setupSidebar(user) {
     ],
   };
 
-  const items = LINKS[(user.usando_como || user.perfil || '').toUpperCase()] || [];
+  const items = LINKS[getCurrentMode(user)] || [];
   nav.innerHTML = items.map(({ href, label, icon }) => {
     const active = path === href ? ' active' : '';
     return `<a href="${href}" class="sidebar-link${active}">\
@@ -349,32 +456,37 @@ function _setupSidebar(user) {
     });
   }
 
-  // Admin-only profile switcher for the current experience mode
+  // View switcher for admin and CCM users only
+  const devContainer = document.getElementById('sidebar-dev');
   const devSelect = document.getElementById('dev-perfil-select');
-  if (devSelect) {
-    const isAdmin = (user.perfil || '').toUpperCase() === 'ADMIN';
-    devSelect.disabled = !isAdmin;
-    devSelect.style.opacity = isAdmin ? '1' : '0.6';
-    devSelect.title = isAdmin ? 'Trocar o modo atual de uso' : 'Apenas administradores podem trocar o modo atual de uso';
-    if (!isAdmin) {
+  if (devContainer && devSelect) {
+    const normalizedPerfil = normalizeProfile(user.perfil);
+    const canSwitch = normalizedPerfil === 'ADMIN' || normalizedPerfil === 'CCM';
+    devContainer.style.display = canSwitch ? '' : 'none';
+    if (!canSwitch) {
       devSelect.value = '';
       return;
     }
 
-    const DB_PERFIL = { SOLICITANTE: 'Solicitante', CCM: 'CCM', ADMIN: 'Administrador', SIC: 'SIC' };
-    const DEST      = { SOLICITANTE: '/novasaf', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
-    devSelect.addEventListener('change', async function () {
+    const allowedModes = getAllowedViewModes(user.perfil);
+    Array.from(devSelect.options).forEach(option => {
+      if (!option.value) return;
+      option.disabled = !allowedModes.includes(option.value);
+      if (option.disabled && devSelect.value === option.value) {
+        devSelect.value = '';
+      }
+    });
+
+    const DEST = { SOLICITANTE: '/minhassafs', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
+    devSelect.value = getCurrentMode(user);
+    devSelect.title = 'Trocar a visualização atual do sistema';
+    devSelect.onchange = function () {
       const appPerfil = this.value;
       if (!appPerfil) return;
-      const res = await API.alterarPerfil(user.id, DB_PERFIL[appPerfil]);
-      if (!res.ok) {
-        Toast.error(res.data?.erro || 'Erro ao trocar o modo atual de uso.');
-        this.value = '';
-        return;
-      }
-      Auth.setUser({ ...user, usando_como: appPerfil, perfil: user.perfil });
+      const nextUser = { ...user, usando_como: appPerfil, perfil: user.perfil };
+      Auth.setUser(nextUser);
       window.location.href = DEST[appPerfil] || '/';
-    });
+    };
   }
 }
 

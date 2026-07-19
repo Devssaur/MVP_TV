@@ -9,12 +9,14 @@ from routes.security import require_auth, get_current_user_context
 try:
     from gotrue.errors import AuthApiError
 except Exception:  # pragma: no cover
-    AuthApiError = Exception
+    class AuthApiError(Exception):
+        pass
 
 try:
     from postgrest.exceptions import APIError as PostgrestAPIError
 except Exception:  # pragma: no cover
-    PostgrestAPIError = Exception
+    class PostgrestAPIError(Exception):
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,13 @@ class AvaliarSafPayload(BaseModel):
     prioridade: str | None = None
     tipo_nota: str | None = 'YP'
     qmnum: str | None = Field(default=None, max_length=30)
+    aufnr: str | None = Field(default=None, max_length=30)
+    texto_breve_nota: str | None = Field(default=None, max_length=500)
+    texto_longo_nota: str | None = None
     motivo_cancelamento: str | None = None
+    centro_trabalho: str | None = Field(default=None, max_length=120)
+    sintoma_id: str | None = Field(default=None, max_length=100)
+    ids_duplicatas: list[str] | None = None
 
 
 def _erro_interno_padrao():
@@ -61,6 +69,66 @@ def _normalize_prioridade(valor) -> str:
     return mapping.get(p, '')
 
 
+def _resolver_sintoma_catalogo_id(supabase: Client, sintoma_id_raw: str | None) -> str | None:
+    """Resolve o sintoma para um id valido em sintomas_catalogo.
+
+    Aceita id ja existente em sintomas_catalogo.
+    Se vier id da tabela sintomas (uuid legado), tenta mapear por descricao.
+    """
+    sintoma_id = str(sintoma_id_raw or '').strip()
+    if not sintoma_id:
+        return None
+
+    # 1) Caminho preferencial: id ja existe no catalogo atual.
+    cat = (
+        supabase.table('sintomas_catalogo')
+        .select('id')
+        .eq('id', sintoma_id)
+        .limit(1)
+        .execute()
+    )
+    if cat.data:
+        return sintoma_id
+
+    # 2) Compatibilidade: id veio da tabela legada sintomas (uuid).
+    sint_legado = (
+        supabase.table('sintomas')
+        .select('id, descricao')
+        .eq('id', sintoma_id)
+        .limit(1)
+        .execute()
+    )
+    legado = (sint_legado.data or [{}])[0]
+    descricao = str(legado.get('descricao') or '').strip()
+    if not descricao:
+        return None
+
+    # 3) Tenta casar no catalogo por descricao (preferencia exata, fallback ilike).
+    cat_by_desc = (
+        supabase.table('sintomas_catalogo')
+        .select('id, descricao')
+        .eq('ativo', True)
+        .eq('descricao', descricao)
+        .limit(1)
+        .execute()
+    )
+    if cat_by_desc.data:
+        return str((cat_by_desc.data[0] or {}).get('id') or '').strip() or None
+
+    cat_by_desc_ilike = (
+        supabase.table('sintomas_catalogo')
+        .select('id, descricao')
+        .eq('ativo', True)
+        .ilike('descricao', descricao)
+        .limit(1)
+        .execute()
+    )
+    if cat_by_desc_ilike.data:
+        return str((cat_by_desc_ilike.data[0] or {}).get('id') or '').strip() or None
+
+    return None
+
+
 # ==========================================
 # 1. ROTA GET: Listar SAFs para a fila CCM (exceto devolvidas)
 # ==========================================
@@ -73,16 +141,41 @@ def listar_pendentes():
             .select(
                 'id, ticket_saf, titulo_falha, descricao_longa, '
                 'local_instalacao, local_instalacao_id, equipamento, equipamento_id, '
+                'sistema_id, subsistema_id, '
+                'via_numero, km_inicial, km_final, '
                 'sintoma_id, prioridade, data_inicio_avaria, hora_inicio_avaria, '
                 'notificador_id, notificador_nome, notificador_area, '
                 'anexo_evidencia_url, criado_em, '
                 'status, motivo_devolucao, motivo_cancelamento, '
-                'atualizado_sap, tipo_nota, qmnum_duplicata, data_avaliacao, '
-                'saf_integracao_sap(qmnum, tipo_nota, status_integracao, mensagem_erro)'
+                'atualizado_sap, tipo_nota, qmnum_duplicata, data_avaliacao, avaliado_por, '
+                'ccm_texto_breve_nota, ccm_texto_longo_nota, ccm_numero_nota, ccm_numero_ordem, ccm_centro_trabalho, '
+                'saf_integracao_sap(qmnum, aufnr, numero_ordem_sap, tipo_nota, status_integracao, mensagem_erro, texto_breve_nota, texto_longo_nota)'
             ) \
             .neq('status', 'DEVOLVIDA') \
             .order('criado_em', desc=False) \
             .execute()
+
+        ids_avaliadores = []
+        for item in (resposta.data or []):
+            aval_id = str(item.get('avaliado_por') or '').strip()
+            if aval_id and aval_id not in ids_avaliadores:
+                ids_avaliadores.append(aval_id)
+
+        nomes_por_id = {}
+        if ids_avaliadores:
+            usuarios_resp = supabase.table('usuarios') \
+                .select('id, nome') \
+                .in_('id', ids_avaliadores) \
+                .execute()
+            for usuario in (usuarios_resp.data or []):
+                uid = str(usuario.get('id') or '').strip()
+                if uid:
+                    nomes_por_id[uid] = str(usuario.get('nome') or '').strip()
+
+        for item in (resposta.data or []):
+            aval_id = str(item.get('avaliado_por') or '').strip()
+            item['aprovador_nome'] = nomes_por_id.get(aval_id, '')
+
         return jsonify(resposta.data), 200
     except Exception:
         logger.exception('Erro interno ao listar pendentes CCM')
@@ -95,6 +188,7 @@ def listar_pendentes():
 @ccm_bp.route('/avaliar/<string:solicitacao_id>', methods=['PUT'])
 @require_auth(('CCM', 'Administrador'))
 def avaliar_saf(solicitacao_id):
+    request_id = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
     dados = request.get_json(silent=True) or {}
     try:
         payload = AvaliarSafPayload.model_validate(dados)
@@ -109,18 +203,46 @@ def avaliar_saf(solicitacao_id):
     avaliador_id = get_current_user_context().get('id')
     prioridade = _normalize_prioridade(payload.prioridade)
     qmnum_manual = (payload.qmnum or '').strip() or None
+    aufnr_manual = (payload.aufnr or '').strip() or None
+    ids_duplicatas = [str(item).strip() for item in (payload.ids_duplicatas or []) if str(item).strip()]
+    texto_breve_nota = (payload.texto_breve_nota or '').strip()
+    texto_longo_nota = (payload.texto_longo_nota or '').strip()
+    centro_trabalho = (payload.centro_trabalho or '').strip()
+    tipo_nota = (payload.tipo_nota or 'YP').strip().upper()
 
     if novo_status not in ('APROVADA', 'DEVOLVIDA', 'CANCELADA'):
         return jsonify({'erro': 'Status invalido. Use APROVADA, DEVOLVIDA ou CANCELADA.'}), 400
+    if novo_status == 'APROVADA' and tipo_nota not in ('YP', 'YE'):
+        return jsonify({'erro': 'Tipo de nota invalido. Use YP ou YE.'}), 400
     if novo_status == 'DEVOLVIDA' and not motivo:
         return jsonify({"erro": "Informe o motivo da devolução."}), 400
     if novo_status == 'CANCELADA':
         motivo_cancelamento = (payload.motivo_cancelamento or '').strip()
         if not motivo_cancelamento:
             return jsonify({'erro': 'Informe o motivo do cancelamento.'}), 400
+    if novo_status == 'APROVADA' and not centro_trabalho:
+        return jsonify({'erro': 'Informe o Centro de Trabalho para aprovar a SAF.'}), 400
+    if novo_status == 'APROVADA' and not (payload.sintoma_id or '').strip():
+        return jsonify({'erro': 'Informe o sintoma da falha para aprovar a SAF.'}), 400
+    if novo_status == 'APROVADA' and not texto_breve_nota:
+        return jsonify({'erro': 'Informe o texto breve da nota para aprovar a SAF.'}), 400
+    if novo_status == 'APROVADA' and not texto_longo_nota:
+        return jsonify({'erro': 'Informe o texto longo da nota para aprovar a SAF.'}), 400
 
     try:
         supabase = _get_supabase_client()
+        sintoma_id_resolvido = None
+        sintoma_id_original = (payload.sintoma_id or '').strip() or None
+        if payload.sintoma_id is not None:
+            sintoma_id_resolvido = _resolver_sintoma_catalogo_id(supabase, payload.sintoma_id)
+            if sintoma_id_original and not sintoma_id_resolvido:
+                logger.warning(
+                    '[AVALIAR_SAF][%s] sintoma_id sem correspondencia em sintomas_catalogo; segue com sintoma_id nulo. solicitacao_id=%s sintoma_id=%s',
+                    request_id,
+                    solicitacao_id,
+                    sintoma_id_original,
+                )
+
         update_data = {
             "status": novo_status,
             "avaliado_por": avaliador_id,
@@ -132,6 +254,23 @@ def avaliar_saf(solicitacao_id):
             update_data["motivo_devolucao"] = motivo
         if novo_status == 'CANCELADA':
             update_data['motivo_cancelamento'] = (payload.motivo_cancelamento or '').strip()
+        if payload.sintoma_id is not None:
+            update_data['sintoma_id'] = sintoma_id_resolvido
+
+        centro_info = None
+        if novo_status == 'APROVADA':
+            centro_q = (
+                supabase.table('centros_trabalho')
+                .select('codigo, denominacao, ativo')
+                .eq('codigo', centro_trabalho)
+                .limit(1)
+                .execute()
+            )
+            if not centro_q.data:
+                return jsonify({'erro': 'Centro de Trabalho invalido.'}), 400
+            centro_info = centro_q.data[0]
+            if centro_info.get('ativo') is False:
+                return jsonify({'erro': 'Centro de Trabalho inativo.'}), 400
 
         supabase.table('saf_solicitacoes') \
             .update(update_data) \
@@ -142,18 +281,23 @@ def avaliar_saf(solicitacao_id):
         erro_sap = None
 
         if novo_status == 'APROVADA':
-            tipo_nota = payload.tipo_nota or 'YP'
-
             # Salva tipo_nota escolhido pelo CCM
             supabase.table('saf_solicitacoes') \
-                .update({'tipo_nota': tipo_nota}) \
+                .update({
+                    'tipo_nota': tipo_nota,
+                    'ccm_texto_breve_nota': texto_breve_nota,
+                    'ccm_texto_longo_nota': texto_longo_nota,
+                    'ccm_numero_nota': qmnum_manual,
+                    'ccm_numero_ordem': aufnr_manual,
+                    'ccm_centro_trabalho': centro_trabalho,
+                }) \
                 .eq('id', solicitacao_id) \
                 .execute()
 
             try:
                 saf = (
                     supabase.table('saf_solicitacoes')
-                    .select('equipamento_id, local_instalacao_id, sintoma_id, ticket_saf, prioridade')
+                    .select('sistema_id, subsistema_id, equipamento, equipamento_id, ticket_saf, prioridade')
                     .eq('id', solicitacao_id)
                     .maybe_single()
                     .execute()
@@ -170,13 +314,24 @@ def avaliar_saf(solicitacao_id):
                 supabase.table('saf_integracao_sap').upsert({
                     'solicitacao_id':      solicitacao_id,
                     'qmnum':               qmnum_manual,
+                    'aufnr':               aufnr_manual,
+                    'numero_ordem_sap':    aufnr_manual,
                     'tipo_nota':           tipo_nota,
                     'status_integracao':   status_integracao,
                     'ultima_tentativa_em': datetime.now(timezone.utc).isoformat(),
                     'mensagem_erro':       mensagem,
+                    'texto_breve_nota':    texto_breve_nota,
+                    'texto_longo_nota':    texto_longo_nota,
                     'payload_resposta':    {
                         'modo': 'manual',
-                        'observacao': 'Integracao automatica SAP desativada no backend.'
+                        'observacao': 'Integracao automatica SAP desativada no backend.',
+                        'centro_trabalho': centro_trabalho,
+                        'centro_trabalho_denominacao': (centro_info or {}).get('denominacao'),
+                        'sintoma_id': sintoma_id_resolvido,
+                        'sintoma_id_original': sintoma_id_original,
+                        'texto_breve_nota': texto_breve_nota,
+                        'texto_longo_nota': texto_longo_nota,
+                        'aufnr': aufnr_manual,
                     },
                 }).execute()
 
@@ -189,57 +344,93 @@ def avaliar_saf(solicitacao_id):
                 erro_sap = 'Nao foi possivel registrar os dados de integracao.'
                 logger.error('Falha ao registrar integracao manual (saf_id=%s): %s', solicitacao_id, sap_err)
 
-            resposta = {'mensagem': 'SAF aprovada.', 'qmnum': qmnum}
+            resposta = {
+                'mensagem': 'SAF aprovada.',
+                'qmnum': qmnum,
+                'aufnr': aufnr_manual,
+                'tipo_nota': tipo_nota,
+                'centro_trabalho': centro_trabalho,
+                'centro_trabalho_denominacao': (centro_info or {}).get('denominacao'),
+            }
             if erro_sap:
                 resposta['aviso_sap'] = (
                     'Aprovacao registrada, mas houve falha ao registrar os dados SAP manualmente.'
                 )
 
             # ── Marca duplicatas ──────────────────────────────────────────
-            # Regra: mesma SAF = mesmo local + mesmo equipamento + mesmo sintoma.
-            # Só marca se AMBAS tiverem sintoma_id definido e forem iguais.
-            # Isso evita falsos positivos quando a SAF aprovada não tem sintoma.
             duplicatas_ids = []
-            if qmnum:
+            if qmnum_manual or aufnr_manual:
                 try:
-                    equip_id   = saf.get('equipamento_id')
-                    local_id   = saf.get('local_instalacao_id')
-                    sintoma_id = saf.get('sintoma_id')
+                    if ids_duplicatas:
+                        duplicatas_ids = [sid for sid in ids_duplicatas if sid != solicitacao_id]
+                    else:
+                        # Regra: mesma SAF = mesmo sistema_id + mesmo subsistema_id + mesmo equipamento.
+                        sistema_id = saf.get('sistema_id')
+                        subsistema_id = saf.get('subsistema_id')
+                        equipamento = str(saf.get('equipamento') or '').strip().upper()
+                        equipamento_id = str(saf.get('equipamento_id') or '').strip()
 
-                    if equip_id and sintoma_id:
-                        abertas = supabase.table('saf_solicitacoes') \
-                            .select('id, local_instalacao_id, equipamento_id, sintoma_id') \
-                            .eq('status', 'ABERTA') \
-                            .neq('id', solicitacao_id) \
-                            .execute()
+                        if sistema_id and subsistema_id and (equipamento or equipamento_id):
+                            abertas = supabase.table('saf_solicitacoes') \
+                                .select('id, sistema_id, subsistema_id, equipamento, equipamento_id') \
+                                .eq('status', 'ABERTA') \
+                                .neq('id', solicitacao_id) \
+                                .execute()
 
-                        for r in (abertas.data or []):
-                            if r.get('equipamento_id') != equip_id:
-                                continue
-                            if r.get('local_instalacao_id') != local_id:
-                                continue
-                            # Exige sintoma igual em ambas — evita marcar SAFs de avaria diferente
-                            if r.get('sintoma_id') != sintoma_id:
-                                continue
-                            duplicatas_ids.append(r['id'])
+                            for r in (abertas.data or []):
+                                if r.get('sistema_id') != sistema_id:
+                                    continue
+                                if r.get('subsistema_id') != subsistema_id:
+                                    continue
 
-                        agora = datetime.now(timezone.utc).isoformat()
-                        for dup_id in duplicatas_ids:
-                            supabase.table('saf_solicitacoes').update({
-                                "status":          "DUPLICADA",
-                                "qmnum_duplicata": qmnum,
-                                "tipo_nota":       tipo_nota,
-                                "data_avaliacao":  agora,
-                                "avaliado_por":    avaliador_id,
-                            }).eq('id', dup_id).execute()
+                                r_equip = str(r.get('equipamento') or '').strip().upper()
+                                r_equip_id = str(r.get('equipamento_id') or '').strip()
 
-                        if duplicatas_ids:
-                            logger.info(
-                                "Marcadas %d SAFs como DUPLICADA (local=%s equip=%s sintoma=%s) "
-                                "→ QMNUM %s: %s",
-                                len(duplicatas_ids), local_id, equip_id,
-                                sintoma_id, qmnum, duplicatas_ids,
-                            )
+                                same_equip = bool(equipamento and r_equip and r_equip == equipamento)
+                                same_equip_id = bool(equipamento_id and r_equip_id and r_equip_id == equipamento_id)
+                                if not (same_equip or same_equip_id):
+                                    continue
+                                duplicatas_ids.append(r['id'])
+
+                    agora = datetime.now(timezone.utc).isoformat()
+                    for dup_id in duplicatas_ids:
+                        supabase.table('saf_solicitacoes').update({
+                            "status":          "APROVADA",
+                            "qmnum_duplicata": qmnum_manual,
+                            "tipo_nota":       tipo_nota,
+                            "ccm_texto_breve_nota": texto_breve_nota,
+                            "ccm_texto_longo_nota": texto_longo_nota,
+                            "ccm_numero_nota": qmnum_manual,
+                            "ccm_numero_ordem": aufnr_manual,
+                            "ccm_centro_trabalho": centro_trabalho,
+                            "data_avaliacao":  agora,
+                            "avaliado_por":    avaliador_id,
+                        }).eq('id', dup_id).execute()
+
+                        supabase.table('saf_integracao_sap').upsert({
+                            'solicitacao_id': dup_id,
+                            'tipo_nota': tipo_nota,
+                            'aufnr': aufnr_manual,
+                            'numero_ordem_sap': aufnr_manual,
+                            'status_integracao': 'PENDENTE',
+                            'texto_breve_nota': texto_breve_nota,
+                            'texto_longo_nota': texto_longo_nota,
+                            'ultima_tentativa_em': agora,
+                            'mensagem_erro': 'SAF marcada como duplicada da nota principal.',
+                            'payload_resposta': {
+                                'modo': 'duplicada',
+                                'saf_referencia': solicitacao_id,
+                                'qmnum_referencia': qmnum_manual,
+                                'aufnr': aufnr_manual,
+                                'centro_trabalho': centro_trabalho,
+                            },
+                        }).execute()
+
+                    if duplicatas_ids:
+                        logger.info(
+                            "Marcadas %d SAFs como APROVADA (modo duplicata) → QMNUM %s: %s",
+                            len(duplicatas_ids), qmnum_manual, duplicatas_ids,
+                        )
                 except Exception:
                     logger.exception('Erro ao marcar duplicatas (nao bloqueante)')
 
@@ -248,14 +439,14 @@ def avaliar_saf(solicitacao_id):
 
         return jsonify({"mensagem": f"SAF atualizada para {novo_status}."}), 200
     except AuthApiError:
-        logger.exception('Erro de autenticacao Supabase ao avaliar SAF id=%s', solicitacao_id)
-        return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
+        logger.exception('[AVALIAR_SAF][%s] Erro de autenticacao Supabase ao avaliar SAF id=%s', request_id, solicitacao_id)
+        return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.', 'request_id': request_id}), 401
     except PostgrestAPIError:
-        logger.exception('Erro de dados Supabase ao avaliar SAF id=%s', solicitacao_id)
-        return jsonify({'erro': 'Nao foi possivel salvar os dados da avaliacao.'}), 500
+        logger.exception('[AVALIAR_SAF][%s] Erro de dados Supabase ao avaliar SAF id=%s', request_id, solicitacao_id)
+        return jsonify({'erro': 'Nao foi possivel salvar os dados da avaliacao.', 'request_id': request_id}), 500
     except Exception:
-        logger.exception('Erro interno ao avaliar SAF id=%s', solicitacao_id)
-        return _erro_interno_padrao()
+        logger.exception('[AVALIAR_SAF][%s] Erro interno ao avaliar SAF id=%s', request_id, solicitacao_id)
+        return jsonify({'erro': 'Nao foi possivel processar sua solicitacao. Tente novamente.', 'request_id': request_id}), 500
 
 
 # ==========================================

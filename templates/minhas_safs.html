@@ -62,6 +62,19 @@
     </button>
   </div>
 
+  <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem;">
+    <input id="minhas-ordem-search" type="search" class="form-control" placeholder="Pesquisar por numero da ordem" style="min-width:280px;max-width:560px;flex:1;">
+    <label for="minhas-days-range" style="font-size:.82rem;color:var(--text-muted);font-weight:600;">Periodo</label>
+    <select id="minhas-days-range" class="form-control" style="width:170px;">
+      <option value="7">Ultimos 7 dias</option>
+      <option value="15">Ultimos 15 dias</option>
+      <option value="30" selected>Ultimos 30 dias</option>
+      <option value="60">Ultimos 60 dias</option>
+      <option value="90">Ultimos 90 dias</option>
+      <option value="0">Todo o periodo</option>
+    </select>
+  </div>
+
   <!-- Table -->
   <div class="table-wrapper" id="table-container">
     <div class="spinner-center"><div class="spinner"></div></div>
@@ -85,21 +98,86 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   let allSafs = [];
   let activeFilter = 'TODAS';
+  let activeOrderSearch = '';
+  let activeDaysRange = '30';
+  let knownDevolvidas = new Set();
+  let devolvidaMonitorInitialized = false;
 
-  // ── Buscar dados ──────────────────────────────────
-  const res = await API.minhasSafs(user.id);
-
-  if (!res.ok) {
-    document.getElementById('table-container').innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">⚠️</div>
-        <p class="empty-state-title">Erro ao carregar dados</p>
-        <p class="empty-state-text">${res.data.erro || 'Tente novamente mais tarde.'}</p>
-      </div>`;
-    return;
+  function parseOrderNumber(saf) {
+    const integ = saf.saf_integracao_sap || {};
+    return String(saf.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
   }
 
-  allSafs = res.data.solicitacoes || [];
+  function withinDays(isoDateStr, days) {
+    if (!days || Number(days) <= 0) return true;
+    const d = new Date(isoDateStr);
+    if (Number.isNaN(d.getTime())) return false;
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    if (diffMs < 0) return true;
+    return diffMs <= Number(days) * 24 * 60 * 60 * 1000;
+  }
+
+  function notifyNovaDevolvida(saf) {
+    const ticket = Fmt.ticket(saf.ticket_saf);
+    const motivo = String(saf.motivo_devolucao || '').trim();
+    const msg = motivo
+      ? `${ticket} devolvida pelo CCM: ${motivo}`
+      : `${ticket} devolvida pelo CCM. Corrija e reenvie.`;
+
+    Toast.warning(msg);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const n = new Notification('SAF devolvida para correcao', {
+          body: `${ticket} exige ajuste e novo envio ao CCM.`,
+          tag: `saf-devolvida-${saf.id}`,
+        });
+        n.onclick = () => {
+          window.focus();
+          window.location.href = `/saf/${saf.id}`;
+        };
+      } catch (_err) {}
+    }
+  }
+
+  function monitorarNovasDevolvidas(items) {
+    const devolvidasAgora = (items || []).filter(s => getStatus(s) === 'DEVOLVIDA');
+    const idsAtuais = new Set(devolvidasAgora.map(s => String(s.id || '').trim()).filter(Boolean));
+
+    if (!devolvidaMonitorInitialized) {
+      knownDevolvidas = idsAtuais;
+      devolvidaMonitorInitialized = true;
+      return;
+    }
+
+    devolvidasAgora
+      .filter(s => !knownDevolvidas.has(String(s.id || '').trim()))
+      .forEach(notifyNovaDevolvida);
+
+    knownDevolvidas = idsAtuais;
+  }
+
+  async function carregarSafs(silent = false) {
+    const res = await API.minhasSafs(user.id);
+
+    if (!res.ok) {
+      if (!silent) {
+        document.getElementById('table-container').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <p class="empty-state-title">Erro ao carregar dados</p>
+            <p class="empty-state-text">${res.data.erro || 'Tente novamente mais tarde.'}</p>
+          </div>`;
+      }
+      return;
+    }
+
+    allSafs = res.data.solicitacoes || [];
+    monitorarNovasDevolvidas(allSafs);
+    updateCounters();
+    renderTable(activeFilter);
+  }
 
   // ── Counters ──────────────────────────────────────
   function getStatus(saf) {
@@ -114,7 +192,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     allSafs.forEach(s => { const st = getStatus(s); if (counts[st] !== undefined) counts[st]++; });
 
     document.getElementById('stat-total').textContent     = allSafs.length;
-    document.getElementById('stat-abertas').textContent   = counts.ABERTA + counts.EM_ANALISE;
+    document.getElementById('stat-abertas').textContent   = counts.ABERTA + counts.EM_ANALISE + counts.DEVOLVIDA;
     document.getElementById('stat-devolvidas').textContent= counts.DEVOLVIDA;
     document.getElementById('stat-aprovadas').textContent = counts.APROVADA;
     document.getElementById('fc-todas').textContent       = allSafs.length;
@@ -127,9 +205,15 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   // ── Render table ──────────────────────────────────
   function renderTable(filter) {
-    const filtered = filter === 'TODAS'
+    let filtered = filter === 'TODAS'
       ? allSafs
       : allSafs.filter(s => getStatus(s) === filter);
+
+    if (activeOrderSearch) {
+      const q = activeOrderSearch.trim().toLowerCase();
+      filtered = filtered.filter(s => parseOrderNumber(s).toLowerCase().includes(q));
+    }
+    filtered = filtered.filter(s => withinDays(s.criado_em, activeDaysRange));
 
     const container = document.getElementById('table-container');
 
@@ -147,11 +231,15 @@ document.addEventListener('DOMContentLoaded', async function () {
       const integ  = saf.saf_integracao_sap || {};
       const status = getStatus(saf);
       const qmnum  = integ.qmnum;
+      const ordem  = integ.aufnr || integ.numero_ordem_sap;
       const sapId  = qmnum
         ? `<span class="font-mono" style="font-size:.8rem;">${integ.tipo_nota || ''} ${qmnum}</span>`
         : (saf.qmnum_duplicata
           ? `<span class="font-mono" style="font-size:.8rem;color:#6b7280;">${saf.tipo_nota ? saf.tipo_nota + ' ' : ''}${saf.qmnum_duplicata}</span>`
           : '<span class="text-muted">—</span>');
+      const ordemId = ordem
+        ? `<span class="font-mono" style="font-size:.8rem;">${ordem}</span>`
+        : '<span class="text-muted">—</span>';
       const devAlert = status === 'DEVOLVIDA'
         ? `<div style="font-size:.74rem;color:var(--purple);margin-top:2px;">⚠ ${(saf.motivo_devolucao||'').substring(0,50)}${saf.motivo_devolucao?.length > 50 ? '…' : ''}</div>`
         : '';
@@ -159,6 +247,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         <tr class="clickable" onclick="window.location.href='/saf/${saf.id}'">
           <td>${Fmt.ticket(saf.ticket_saf)}</td>
           <td>${sapId}</td>
+          <td>${ordemId}</td>
           <td>${Fmt.statusBadge(status)} ${devAlert}</td>
           <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${saf.titulo || saf.titulo_falha || '—'}</td>
           <td>${Fmt.prioBadge(saf.prioridade || 'MEDIA')}</td>
@@ -171,7 +260,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         <thead>
           <tr>
             <th>Ticket SAF</th>
-            <th>Nº Nota SAP</th>
+            <th>Nota</th>
+            <th>Ordem</th>
             <th>Status</th>
             <th>Descrição</th>
             <th>Prioridade</th>
@@ -192,8 +282,20 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
   });
 
-  updateCounters();
-  renderTable('TODAS');
+  document.getElementById('minhas-ordem-search')?.addEventListener('input', function () {
+    activeOrderSearch = this.value || '';
+    renderTable(activeFilter);
+  });
+
+  document.getElementById('minhas-days-range')?.addEventListener('change', function () {
+    activeDaysRange = this.value || '30';
+    renderTable(activeFilter);
+  });
+
+  await carregarSafs(false);
+  setInterval(() => {
+    carregarSafs(true);
+  }, 30000);
 });
 </script>
 {% endblock %}

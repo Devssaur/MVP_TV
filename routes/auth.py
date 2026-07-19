@@ -65,6 +65,44 @@ def _to_app_profile(db_perfil: str) -> str:
     return mapa.get(db_perfil, db_perfil)
 
 
+def _extract_access_token(resp) -> str | None:
+    """Extrai o access token de diferentes formatos de resposta do Supabase."""
+    if not resp:
+        return None
+
+    if isinstance(resp, dict):
+        if resp.get("access_token"):
+            return str(resp["access_token"]).strip()
+        if resp.get("token"):
+            return str(resp["token"]).strip()
+        session = resp.get("session")
+        if isinstance(session, dict):
+            if session.get("access_token"):
+                return str(session["access_token"]).strip()
+            if session.get("token"):
+                return str(session["token"]).strip()
+        return None
+
+    for attr_name in ("access_token", "token"):
+        value = getattr(resp, attr_name, None)
+        if value:
+            return str(value).strip()
+
+    session = getattr(resp, "session", None)
+    if isinstance(session, dict):
+        for attr_name in ("access_token", "token"):
+            value = session.get(attr_name)
+            if value:
+                return str(value).strip()
+    else:
+        for attr_name in ("access_token", "token"):
+            value = getattr(session, attr_name, None)
+            if value:
+                return str(value).strip()
+
+    return None
+
+
 def _to_db_profile(app_perfil: str) -> str:
     """Converte códigos do app para os rótulos aceitos na constraint do banco."""
     mapa = {
@@ -190,7 +228,7 @@ def login():
     try:
         result = (
             supabase.table("usuarios")
-            .select("id, nome, perfil, usando_como, aprovado, empresa, area")
+            .select("id, nome, perfil, aprovado, empresa, area")
             .eq("id", user_id)
             .single()
             .execute()
@@ -207,14 +245,16 @@ def login():
     if not usuario.get("aprovado"):
         return jsonify({"erro": "Acesso pendente. Aguarde a aprovacao do administrador."}), 403
 
+    access_token = _extract_access_token(resp)
     return jsonify({
         "id":      usuario["id"],
         "nome":    usuario["nome"],
         "perfil":  _to_app_profile(usuario["perfil"]),
-        "usando_como": _to_app_profile(usuario.get("usando_como") or usuario.get("perfil")),
+        "usando_como": _to_app_profile(usuario["perfil"]),
         "empresa": usuario.get("empresa"),
         "area":    usuario.get("area"),
-        "access_token": getattr(getattr(resp, 'session', None), 'access_token', None),
+        "access_token": access_token,
+        "token": access_token,
     }), 200
 
 

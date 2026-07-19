@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 VALID_PROFILES = ("Solicitante", "CCM", "Administrador", "SIC")
 
 
+def _is_auth_user_not_found(error: Exception) -> bool:
+    """Detecta erro idempotente de exclusao quando o usuario ja nao existe no Auth."""
+    status_code = getattr(error, "status", None) or getattr(error, "status_code", None)
+    if status_code == 404:
+        return True
+
+    message = (str(error) or "").lower()
+    return "user not found" in message or "not found" in message
+
+
 def _normalize_profile(perfil: str | None) -> str:
     perfil_normalizado = (perfil or "").strip()
     mapa = {
@@ -33,13 +43,20 @@ def _normalize_profile(perfil: str | None) -> str:
     return mapa.get(perfil_normalizado.upper(), perfil_normalizado)
 
 
+_supabase_client: Client | None = None
+
+
 def _get_supabase_client() -> Client:
-    supabase_url = os.getenv("SUPABASE_URL")
-    # Operações admin usam a service_role key para bypasser RLS
-    supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
-    if not supabase_url or not supabase_key:
-        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.")
-    return create_client(supabase_url, supabase_key)
+    """Singleton do cliente Supabase — evita overhead de reconexao a cada request HTTP."""
+    global _supabase_client
+    if _supabase_client is None:
+        supabase_url = os.getenv("SUPABASE_URL")
+        # Operações admin usam a service_role key para bypasser RLS
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+        if not supabase_url or not supabase_key:
+            raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.")
+        _supabase_client = create_client(supabase_url, supabase_key)
+    return _supabase_client
 
 
 def _registrar_log(supabase: Client, evento: str, payload: dict | None, usuario_id: str | None = None) -> None:
@@ -57,7 +74,7 @@ def _registrar_log(supabase: Client, evento: str, payload: dict | None, usuario_
 def _selecionar_usuario_por_id(supabase: Client, usuario_id: str):
     return (
         supabase.table("usuarios")
-        .select("id, nome, email, perfil, usando_como, aprovado, empresa, area, created_at")
+        .select("id, nome, email, perfil, aprovado, empresa, area, created_at")
         .eq("id", usuario_id)
         .single()
         .execute()
@@ -93,7 +110,7 @@ def listar_usuarios():
         supabase = _get_supabase_client()
         result = (
             supabase.table("usuarios")
-            .select("id, nome, email, perfil, usando_como, aprovado, empresa, area, created_at")
+            .select("id, nome, email, perfil, aprovado, empresa, area, created_at")
             .order("created_at", desc=True)
             .execute()
         )
@@ -178,10 +195,30 @@ def alterar_perfil(usuario_id):
         antes_sel = _selecionar_usuario_por_id(supabase, usuario_id)
         antes = antes_sel.data if antes_sel else None
 
-        supabase.table("usuarios") \
-            .update({"usando_como": perfil}) \
-            .eq("id", usuario_id) \
-            .execute()
+        # MAP to usando_como uppercase value for DB constraint compatibility
+        map_usando_como = {
+            "Solicitante": "SOLICITANTE",
+            "CCM": "CCM",
+            "Administrador": "ADMIN",
+            "SIC": "SIC"
+        }
+        usando_como_val = map_usando_como.get(perfil)
+
+        if usuario_id == ator_id:
+            # Trocar o modo de uso do próprio admin (sidebar switcher)
+            supabase.table("usuarios") \
+                .update({"usando_como": usando_como_val}) \
+                .eq("id", usuario_id) \
+                .execute()
+        else:
+            # Alterar o perfil permanente de outro usuário (dropdown na lista de usuários)
+            supabase.table("usuarios") \
+                .update({
+                    "perfil": perfil,
+                    "usando_como": usando_como_val
+                }) \
+                .eq("id", usuario_id) \
+                .execute()
 
         # Busca o usuário atualizado (RLS pode impedir retorno direto do update)
         sel = _selecionar_usuario_por_id(supabase, usuario_id)
@@ -193,8 +230,8 @@ def alterar_perfil(usuario_id):
             "ADMIN_ALTEROU_PERFIL_USUARIO",
             {
                 "alvo_usuario_id": usuario_id,
-                "antes": {"usando_como": (antes or {}).get("usando_como") or (antes or {}).get("perfil")},
-                "depois": {"usando_como": sel.data.get("usando_como") or sel.data.get("perfil")},
+                "antes": {"perfil": (antes or {}).get("perfil")},
+                "depois": {"perfil": sel.data.get("perfil")},
             },
             ator_id,
         )
@@ -232,12 +269,24 @@ def editar_usuario(usuario_id):
         if not antes_sel.data:
             return jsonify({"erro": "Usuário não encontrado."}), 404
 
+        if usuario_id == ator_id and perfil != antes_sel.data.get("perfil"):
+            return jsonify({"erro": "Você não pode alterar seu próprio perfil."}), 400
+
+        map_usando_como = {
+            "Solicitante": "SOLICITANTE",
+            "CCM": "CCM",
+            "Administrador": "ADMIN",
+            "SIC": "SIC"
+        }
+        usando_como_val = map_usando_como.get(perfil)
+
         update_data = {
             "nome": nome,
             "email": email,
             "empresa": empresa,
             "area": area,
             "perfil": perfil,
+            "usando_como": usando_como_val
         }
 
         supabase.table("usuarios").update(update_data).eq("id", usuario_id).execute()
@@ -284,14 +333,23 @@ def excluir_usuario(usuario_id):
     payload = request.get_json(silent=True) or {}
     ator_id = get_current_user_context().get('id')
 
+    if ator_id and usuario_id == ator_id:
+        return jsonify({'erro': 'Nao e permitido excluir o proprio usuario enquanto logado.'}), 400
+
     try:
         supabase = _get_supabase_client()
         antes_sel = _selecionar_usuario_por_id(supabase, usuario_id)
         if not antes_sel.data:
             return jsonify({"erro": "Usuário não encontrado."}), 404
 
-        # Remove do Auth (quando a FK existe com ON DELETE CASCADE, apaga de usuarios automaticamente).
-        supabase.auth.admin.delete_user(usuario_id)
+        # Remove do Auth. Se ja nao existir no Auth, trata como idempotente e segue limpeza local.
+        try:
+            supabase.auth.admin.delete_user(usuario_id)
+        except AuthApiError as exc:
+            if _is_auth_user_not_found(exc):
+                logger.warning('Usuario ausente no Auth durante exclusao admin id=%s; seguindo limpeza local.', usuario_id)
+            else:
+                raise
 
         # Garantia defensiva caso o banco não esteja com cascata configurada.
         supabase.table("usuarios").delete().eq("id", usuario_id).execute()
@@ -314,7 +372,8 @@ def excluir_usuario(usuario_id):
 
         return jsonify({"mensagem": "Usuário excluído com sucesso."}), 200
     except AuthApiError:
-        return jsonify({'erro': 'Falha de autenticacao ao excluir usuario.'}), 401
+        logger.exception('Falha no provedor de autenticacao ao excluir usuario id=%s', usuario_id)
+        return jsonify({'erro': 'Nao foi possivel excluir o usuario no provedor de autenticacao.'}), 502
     except PostgrestAPIError:
         return jsonify({'erro': 'Nao foi possivel excluir o usuario.'}), 500
     except Exception:

@@ -49,7 +49,16 @@
   </div>
 
   <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem;">
-    <input id="sic-search" type="text" class="form-control" placeholder="Buscar por ticket, titulo, equipamento, local ou notificador..." style="min-width:280px;max-width:560px;flex:1;">
+    <input id="sic-search" type="search" class="form-control" placeholder="Pesquisar por numero da ordem" style="min-width:280px;max-width:560px;flex:1;">
+    <label for="sic-days-range" style="font-size:.82rem;color:var(--text-muted);font-weight:600;">Periodo</label>
+    <select id="sic-days-range" class="form-control" style="width:170px;">
+      <option value="7">Ultimos 7 dias</option>
+      <option value="15">Ultimos 15 dias</option>
+      <option value="30" selected>Ultimos 30 dias</option>
+      <option value="60">Ultimos 60 dias</option>
+      <option value="90">Ultimos 90 dias</option>
+      <option value="0">Todo o periodo</option>
+    </select>
     <label for="sic-page-size" style="font-size:.82rem;color:var(--text-muted);font-weight:600;">Ordens por pagina</label>
     <select id="sic-page-size" class="form-control" style="width:110px;">
       <option value="50" selected>50</option>
@@ -79,8 +88,24 @@ document.addEventListener('DOMContentLoaded', async function () {
   let allSafs = [];
   let activeFilter = 'TODAS';
   let activeSearch = '';
+  let activeDaysRange = '30';
   let pageSize = 50;
   let currentPage = 1;
+
+  function parseOrderNumber(saf) {
+    const integ = saf.saf_integracao_sap || {};
+    return String(saf.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
+  }
+
+  function withinDays(isoDateStr, days) {
+    if (!days || Number(days) <= 0) return true;
+    const d = new Date(isoDateStr);
+    if (Number.isNaN(d.getTime())) return false;
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    if (diffMs < 0) return true;
+    return diffMs <= Number(days) * 24 * 60 * 60 * 1000;
+  }
 
   const res = await API.notificacoesSic();
   if (!res.ok) {
@@ -123,16 +148,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     return allSafs.filter(s => {
       const st = getStatus(s);
       if (activeFilter !== 'TODAS' && st !== activeFilter) return false;
+      if (!withinDays(s.criado_em, activeDaysRange)) return false;
       if (!q) return true;
-      const text = [
-        s.ticket_saf,
-        s.titulo_falha,
-        s.equipamento,
-        s.local_instalacao,
-        s.notificador_nome,
-        s.notificador_area,
-      ].filter(Boolean).join(' ').toLowerCase();
-      return text.includes(q);
+      return parseOrderNumber(s).toLowerCase().includes(q);
     });
   }
 
@@ -152,18 +170,19 @@ document.addEventListener('DOMContentLoaded', async function () {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
     const now = new Date();
     const filtro = activeFilter === 'TODAS' ? 'Todas' : activeFilter;
-    const busca = (activeSearch || '').trim() || 'Sem busca';
+    const busca = (activeSearch || '').trim() || 'Sem busca de ordem';
 
     doc.setFontSize(13);
     doc.text('Chamados SIC - Tabela visivel', 40, 34);
     doc.setFontSize(9);
     doc.text(`Gerado em: ${now.toLocaleString('pt-BR')}`, 40, 50);
-    doc.text(`Filtro: ${filtro} | Busca: ${busca} | Total: ${data.length}`, 40, 64);
+    doc.text(`Filtro: ${filtro} | Ordem: ${busca} | Periodo: ${activeDaysRange === '0' ? 'Completo' : `Ultimos ${activeDaysRange} dias`} | Total: ${data.length}`, 40, 64);
 
     const body = data.map(s => {
       const integ = s.saf_integracao_sap || {};
       const st = getStatus(s);
       const nota = integ.qmnum ? `${integ.tipo_nota || ''} ${integ.qmnum}`.trim() : '-';
+      const ordem = (integ.aufnr || integ.numero_ordem_sap || '-');
       return [
         s.ticket_saf ? `SAF #${String(s.ticket_saf).padStart(6, '0')}` : '-',
         Fmt.statusLabel(st),
@@ -173,13 +192,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         s.notificador_nome || '-',
         Fmt.prioLabel(s.prioridade || 'MEDIA'),
         nota,
+        ordem,
         Fmt.date(s.criado_em),
       ];
     });
 
     doc.autoTable({
       startY: 78,
-      head: [['Ticket', 'Status', 'Titulo', 'Equipamento', 'Local', 'Notificador', 'Prioridade', 'Nota SAP', 'Criado em']],
+      head: [['Ticket', 'Status', 'Titulo', 'Equipamento', 'Local', 'Notificador', 'Prioridade', 'Nota', 'Ordem', 'Criado em']],
       body,
       styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
       headStyles: { fillColor: [30, 58, 95] },
@@ -245,6 +265,9 @@ document.addEventListener('DOMContentLoaded', async function () {
       const nota = integ.qmnum
         ? `<span class="font-mono" style="font-size:.8rem;">${integ.tipo_nota || ''} ${integ.qmnum}</span>`
         : '<span class="text-muted">-</span>';
+      const ordem = (integ.aufnr || integ.numero_ordem_sap)
+        ? `<span class="font-mono" style="font-size:.8rem;">${integ.aufnr || integ.numero_ordem_sap}</span>`
+        : '<span class="text-muted">-</span>';
       return `
         <tr class="clickable" onclick="window.location.href='/saf/${s.id}'">
           <td>${Fmt.ticket(s.ticket_saf)}</td>
@@ -255,6 +278,7 @@ document.addEventListener('DOMContentLoaded', async function () {
           <td>${s.notificador_nome || '-'}</td>
           <td>${Fmt.prioBadge(s.prioridade || 'MEDIA')}</td>
           <td>${nota}</td>
+          <td>${ordem}</td>
           <td class="text-muted text-sm">${Fmt.date(s.criado_em)}</td>
         </tr>`;
     }).join('');
@@ -270,7 +294,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             <th>Local</th>
             <th>Notificador</th>
             <th>Prioridade</th>
-            <th>Nota SAP</th>
+            <th>Nota</th>
+            <th>Ordem</th>
             <th>Criado em</th>
           </tr>
         </thead>
@@ -292,6 +317,12 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   document.getElementById('sic-search').addEventListener('input', function () {
     activeSearch = this.value || '';
+    currentPage = 1;
+    renderTable();
+  });
+
+  document.getElementById('sic-days-range').addEventListener('change', function () {
+    activeDaysRange = this.value || '30';
     currentPage = 1;
     renderTable();
   });
