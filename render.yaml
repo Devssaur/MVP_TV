@@ -15,3 +15,5 @@ services:
         sync: false
       - key: DEV_MODE
         value: "false"
+      - key: APP_VERSION
+        value: "0.0.4"
