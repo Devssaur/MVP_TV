@@ -95,6 +95,15 @@ const Auth = (() => {
 const API = (() => {
   const BASE = '/api';
 
+  function sanitizeBodyForLog(body) {
+    if (!body || typeof body !== 'object') return body;
+    const clone = { ...body };
+    if (clone.foto_base64) {
+      clone.foto_base64 = `<base64:${String(clone.foto_base64).length} chars>`;
+    }
+    return clone;
+  }
+
   async function request(method, path, body) {
     const currentUser = Auth.getUser();
     const token = currentUser?.access_token || currentUser?.token;
@@ -110,8 +119,23 @@ const API = (() => {
     try {
       const res = await fetch(BASE + path, opts);
       const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('[API][ERROR]', {
+          method,
+          path,
+          status: res.status,
+          requestBody: sanitizeBodyForLog(body),
+          response: json,
+        });
+      }
       return { ok: res.ok, status: res.status, data: json };
     } catch (err) {
+      console.error('[API][NETWORK_ERROR]', {
+        method,
+        path,
+        requestBody: sanitizeBodyForLog(body),
+        error: err,
+      });
       return { ok: false, status: 0, data: { erro: 'Erro de conexão com o servidor.' } };
     }
   }

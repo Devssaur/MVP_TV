@@ -404,6 +404,7 @@ def listar_falhas_por_subsistema():
       3) Retorna sintomas vinculados aos grupo_id encontrados.
     """
     sistema_id = request.args.get('sistema_id', type=int)
+    subsistema_id = request.args.get('subsistema_id', type=int)
     if not sistema_id:
         return jsonify({'erro': 'Parametro sistema_id obrigatorio.'}), 400
 
@@ -418,6 +419,26 @@ def listar_falhas_por_subsistema():
             .execute()
         )
         grupos = grupos_res.data or []
+
+        if subsistema_id:
+            sub_res = (
+                supabase.table('subsistemas')
+                .select('id, codigo, nome')
+                .eq('id', subsistema_id)
+                .maybe_single()
+                .execute()
+            )
+            sub = sub_res.data or {}
+            sub_codigo = str(sub.get('codigo') or '').strip().upper()
+
+            if sub_codigo:
+                grupos_filtrados = [
+                    g for g in grupos
+                    if str(g.get('codigo') or '').strip().upper() == sub_codigo
+                ]
+                if grupos_filtrados:
+                    grupos = grupos_filtrados
+
         if not grupos:
             return jsonify({'falhas': [], 'total': 0}), 200
 

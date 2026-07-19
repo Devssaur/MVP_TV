@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   const saf  = res.data.solicitacao || res.data;
   const ctrl = saf.saf_controle_ccm?.[0] || saf.controle || {};
   const sap  = saf.saf_integracao_sap?.[0] || saf.integracao || {};
-  const status = ctrl.status || 'ABERTA';
+  const status = saf.status || ctrl.status || 'ABERTA';
 
   // ── Cabeçalho ─────────────────────────────────────
   document.getElementById('page-heading').textContent =
@@ -222,10 +222,10 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   // ── Alerta devolução ──────────────────────────────
-  if (status === 'DEVOLVIDA' && ctrl.motivo_devolucao) {
+  if (status === 'DEVOLVIDA' && (saf.motivo_devolucao || ctrl.motivo_devolucao)) {
     const alertEl = document.getElementById('devolucao-alert');
     alertEl.classList.remove('hidden');
-    document.getElementById('devolucao-motivo').textContent = ' ' + ctrl.motivo_devolucao;
+    document.getElementById('devolucao-motivo').textContent = ' ' + (saf.motivo_devolucao || ctrl.motivo_devolucao);
   }
 
   // ── Dados SAP ─────────────────────────────────────
@@ -302,8 +302,8 @@ document.addEventListener('DOMContentLoaded', async function () {
   const timeline = document.getElementById('timeline');
   const steps = [
     { label: 'SAF Criada',        date: saf.criado_em,          dot: 'active' },
-    { label: 'Em Análise (CCM)',  date: ctrl.data_avaliacao,    dot: status === 'ABERTA' ? '' : 'active' },
-    { label: Fmt.statusLabel(status), date: ctrl.data_avaliacao, dot: status === 'APROVADA' ? 'success' : status === 'CANCELADA' ? 'danger' : status === 'DEVOLVIDA' ? 'active' : '' },
+    { label: 'Em Análise (CCM)',  date: saf.data_avaliacao || ctrl.data_avaliacao,    dot: status === 'ABERTA' ? '' : 'active' },
+    { label: Fmt.statusLabel(status), date: saf.data_avaliacao || ctrl.data_avaliacao, dot: status === 'APROVADA' ? 'success' : status === 'CANCELADA' ? 'danger' : status === 'DEVOLVIDA' ? 'active' : '' },
   ];
   if (sap.qmnum || sap.sap_qmnum) {
     steps.push({ label: 'Nota SAP Gerada', date: sap.ultima_tentativa_em, dot: 'success' });

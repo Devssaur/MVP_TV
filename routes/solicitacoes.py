@@ -28,11 +28,13 @@ class CriarSafPayload(BaseModel):
 
     notificador_id: str = Field(min_length=6, max_length=64)
     titulo_falha: str = Field(min_length=3, max_length=200)
-    descricao_longa: str | None = Field(default=None, max_length=4000)
+    descricao_longa: str | None = None
     local_instalacao_id: str = Field(min_length=1, max_length=100)
     local_instalacao: str | None = Field(default=None, max_length=200)
     equipamento_id: str | None = Field(default=None, max_length=100)
-    equipamento: str | None = Field(default=None, max_length=200)
+    equipamento: str | None = None
+    sistema_id: str | None = Field(default=None, max_length=64)
+    subsistema_id: str | None = Field(default=None, max_length=64)
     sintoma_id: str | None = Field(default=None, max_length=100)
     data_inicio_avaria: str = Field(min_length=8, max_length=20)
     hora_inicio_avaria: str = Field(min_length=4, max_length=20)
@@ -49,14 +51,20 @@ class AtualizarSafPayload(BaseModel):
     model_config = ConfigDict(extra='ignore')
 
     titulo_falha: str | None = Field(default=None, min_length=3, max_length=200)
-    descricao_longa: str | None = Field(default=None, max_length=4000)
+    descricao_longa: str | None = None
     local_instalacao_id: str | None = Field(default=None, min_length=1, max_length=100)
     local_instalacao: str | None = Field(default=None, max_length=200)
     equipamento_id: str | None = Field(default=None, max_length=100)
-    equipamento: str | None = Field(default=None, max_length=200)
+    equipamento: str | None = None
+    sistema_id: str | None = Field(default=None, max_length=64)
+    subsistema_id: str | None = Field(default=None, max_length=64)
     sintoma_id: str | None = Field(default=None, max_length=100)
+    prioridade: str | None = Field(default=None, max_length=20)
     data_inicio_avaria: str | None = Field(default=None, min_length=8, max_length=20)
     hora_inicio_avaria: str | None = Field(default=None, min_length=4, max_length=20)
+    via_numero: str | None = Field(default=None, max_length=3)
+    km_inicial: str | None = Field(default=None, max_length=5)
+    km_final: str | None = Field(default=None, max_length=5)
 
 
 class CancelarSafPayload(BaseModel):
@@ -191,7 +199,8 @@ def buscar_saf(saf_id: str):
                 'id, ticket_saf, titulo_falha, descricao_longa, prioridade, criado_em, '
                 'status, motivo_devolucao, motivo_cancelamento, data_avaliacao, '
                 'local_instalacao, local_instalacao_id, equipamento, equipamento_id, '
-                'sintoma_id, data_inicio_avaria, hora_inicio_avaria, notificador_id, '
+                'sistema_id, subsistema_id, sintoma_id, data_inicio_avaria, hora_inicio_avaria, '
+                'via_numero, km_inicial, km_final, notificador_id, '
                 'notificador_nome, notificador_area, anexo_evidencia_url, '
                 'saf_integracao_sap(qmnum, aufnr, numero_ordem_sap, tipo_nota, status_integracao, ultima_tentativa_em, mensagem_erro)'
             )
@@ -237,7 +246,7 @@ def atualizar_saf(saf_id: str):
     try:
         atual = (
             supabase.table('saf_solicitacoes')
-            .select('id, notificador_id, status')
+            .select('id, notificador_id, status, sistema_id, subsistema_id, sintoma_id')
             .eq('id', saf_id)
             .maybe_single()
             .execute()
@@ -250,6 +259,71 @@ def atualizar_saf(saf_id: str):
 
         if atual.get('status') != 'DEVOLVIDA' and user.get('perfil') == 'Solicitante':
             return jsonify({'erro': 'Apenas SAFs devolvidas podem ser editadas pelo solicitante.'}), 400
+
+        prioridade = str(campos.get('prioridade') or '').strip().upper()
+        if prioridade:
+            mapa_prioridade = {
+                '1': 'BAIXA',
+                '2': 'MEDIA',
+                '3': 'ALTA',
+                '4': 'CRITICA',
+                'MÉDIA': 'MEDIA',
+            }
+            prioridade = mapa_prioridade.get(prioridade, prioridade)
+            if prioridade not in {'BAIXA', 'MEDIA', 'ALTA', 'CRITICA'}:
+                prioridade = 'ALTA'
+            campos['prioridade'] = prioridade
+
+        # Compatibilidade de tipos: algumas fontes retornam UUID para campos bigint.
+        # Mantemos valor anterior quando o novo valor nao for numerico.
+        for campo_id in ('sistema_id', 'subsistema_id'):
+            if campo_id not in campos:
+                continue
+            raw = str(campos.get(campo_id) or '').strip()
+            if not raw:
+                campos[campo_id] = None
+                continue
+            if raw.isdigit():
+                campos[campo_id] = int(raw)
+                continue
+            current_app.logger.warning(
+                '[ATUALIZAR_SAF] %s invalido para bigint (saf_id=%s, valor=%s). Mantendo valor atual.',
+                campo_id,
+                saf_id,
+                raw,
+            )
+            campos[campo_id] = atual.get(campo_id)
+
+        if 'sintoma_id' in campos:
+            sintoma_raw = str(campos.get('sintoma_id') or '').strip()
+            if not sintoma_raw:
+                campos['sintoma_id'] = None
+            else:
+                sintoma_valido = False
+                try:
+                    sintoma_check = (
+                        supabase.table('sintomas_catalogo')
+                        .select('id')
+                        .eq('id', sintoma_raw)
+                        .limit(1)
+                        .execute()
+                    )
+                    sintoma_valido = bool(sintoma_check.data or [])
+                except Exception:
+                    current_app.logger.exception(
+                        '[ATUALIZAR_SAF] Falha ao validar sintoma_id no catalogo (saf_id=%s).',
+                        saf_id,
+                    )
+
+                if sintoma_valido:
+                    campos['sintoma_id'] = sintoma_raw
+                else:
+                    current_app.logger.warning(
+                        '[ATUALIZAR_SAF] sintoma_id invalido (saf_id=%s, valor=%s). Mantendo valor atual.',
+                        saf_id,
+                        sintoma_raw,
+                    )
+                    campos['sintoma_id'] = atual.get('sintoma_id')
 
         campos['status'] = 'ABERTA'
         campos['motivo_devolucao'] = None
@@ -332,18 +406,34 @@ def cancelar_saf(saf_id: str):
 @solicitacoes_bp.route("/criar", methods=["POST"])
 @require_auth(("Solicitante", "CCM", "Administrador"))
 def criar_saf():
+    request_id = str(uuid.uuid4())
     raw_data = request.get_json(silent=True) or {}
+    if not raw_data.get("local_instalacao_id") and raw_data.get("local_instalacao"):
+        raw_data["local_instalacao_id"] = str(raw_data.get("local_instalacao")).strip()
+
+    raw_log = dict(raw_data)
+    if raw_log.get("foto_base64"):
+        raw_log["foto_base64"] = f"<base64:{len(str(raw_log.get('foto_base64') or ''))} chars>"
+
     try:
         payload = CriarSafPayload.model_validate(raw_data)
     except ValidationError as exc:
-        return jsonify({'erro': 'Dados invalidos para criacao da SAF.', 'detalhes': exc.errors()}), 400
+        current_app.logger.warning(
+            "[CRIAR_SAF][%s] ValidationError payload=%s errors=%s",
+            request_id,
+            raw_log,
+            exc.errors(),
+        )
+        return jsonify({
+            'erro': 'Dados invalidos para criacao da SAF.',
+            'detalhes': exc.errors(),
+            'request_id': request_id,
+        }), 400
 
     dados = payload.model_dump(exclude_none=True)
     user = get_current_user_context()
     if user.get('perfil') == 'Solicitante' and payload.notificador_id != user.get('id'):
         return jsonify({'erro': 'Acesso negado para criar SAF em nome de outro usuario.'}), 403
-
-    request_id = str(uuid.uuid4())
 
     # Evita logar base64 completo da foto e reduz risco de poluir o terminal.
     dados_log = dict(dados)
@@ -356,6 +446,11 @@ def criar_saf():
         request_id,
         dados_log,
     )
+
+    # Compatibilidade: alguns fluxos do front podem enviar apenas local_instalacao.
+    # Mantemos local_instalacao_id preenchido com fallback para evitar 400 indevido.
+    if not dados.get("local_instalacao_id") and dados.get("local_instalacao"):
+        dados["local_instalacao_id"] = str(dados.get("local_instalacao")).strip()
 
     campos_obrigatorios = [
         "notificador_id",
@@ -435,6 +530,8 @@ def criar_saf():
             "local_instalacao_id": dados.get("local_instalacao_id"),
             "equipamento":         dados.get("equipamento"),
             "equipamento_id":      dados.get("equipamento_id"),
+            "sistema_id":          int(dados.get("sistema_id")) if str(dados.get("sistema_id") or '').isdigit() else None,
+            "subsistema_id":       int(dados.get("subsistema_id")) if str(dados.get("subsistema_id") or '').isdigit() else None,
             "sintoma_id":          sintoma_id_validado,
             "prioridade":          prioridade,
             "via_numero":          dados.get("via_numero"),
@@ -480,6 +577,31 @@ def criar_saf():
                         tentativa + 1,
                     )
                     insert_payload.pop("sintoma_id", None)
+                    handled = True
+
+                if (
+                    ("Could not find the 'sistema_id' column" in err_txt)
+                    or ("sistema_id" in err_txt and "schema cache" in err_txt)
+                ) and "sistema_id" in insert_payload:
+                    current_app.logger.warning(
+                        "[CRIAR_SAF][%s] tentativa=%s coluna sistema_id ausente; retry sem sistema_id/subsistema_id",
+                        request_id,
+                        tentativa + 1,
+                    )
+                    insert_payload.pop("sistema_id", None)
+                    insert_payload.pop("subsistema_id", None)
+                    handled = True
+
+                if (
+                    ("Could not find the 'subsistema_id' column" in err_txt)
+                    or ("subsistema_id" in err_txt and "schema cache" in err_txt)
+                ) and "subsistema_id" in insert_payload:
+                    current_app.logger.warning(
+                        "[CRIAR_SAF][%s] tentativa=%s coluna subsistema_id ausente; retry sem subsistema_id",
+                        request_id,
+                        tentativa + 1,
+                    )
+                    insert_payload.pop("subsistema_id", None)
                     handled = True
 
                 # Banco atual referencia saf_solicitacoes.sintoma_id -> sintomas_catalogo(id).

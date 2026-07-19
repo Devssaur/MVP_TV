@@ -63,8 +63,8 @@
           </div>
         </div>
         <div id="estacao-row-2" class="flux-grid est-row">
-          <div class="form-group" id="fluxo-falha-wrap">
-            <label class="form-label" for="fluxo-falha">Falha <span class="required">*</span></label>
+          <div class="form-group" id="fluxo-falha-wrap" style="display:none;">
+            <label class="form-label" for="fluxo-falha">Falha</label>
             <select id="fluxo-falha" class="form-control compact-select" disabled>
               <option value=""></option>
             </select>
@@ -108,7 +108,7 @@
           </div>
           <div class="form-group" id="fluxo-equipamento-wrap">
             <label class="form-label" for="equipamento_curto">Equipamento <span class="required" id="equipamento-required" style="display:none;">*</span></label>
-            <input id="equipamento_curto" type="text" class="form-control" maxlength="12" placeholder="Ex: EQ01">
+            <input id="equipamento_curto" type="text" class="form-control" placeholder="Ex: EQ01">
           </div>
         </div>
       </div>
@@ -283,11 +283,24 @@
   }
 
   .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-1,
-  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-2,
-  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-1,
-  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-2,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-1 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (min-width: 1172px) {
+    .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-1,
+    .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-1 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
   .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-1 {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-2,
+  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-2 {
+    display: none;
   }
 
   .nova-saf-clean .estacao-sistema-layout.mode-via #estacao-row-2 {
@@ -321,11 +334,6 @@
 
   .nova-saf-clean .estacao-sistema-layout.mode-s258 #estacao-row-3 {
     grid-template-columns: 1fr 1fr 1fr;
-  }
-
-  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-1,
-  .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-2 {
-    grid-template-columns: 1fr 1fr;
   }
 
   .nova-saf-clean .estacao-sistema-layout.mode-s7 #estacao-row-falha,
@@ -484,6 +492,9 @@
 document.addEventListener('DOMContentLoaded', async function () {
   const user = Auth.requireAuth(['SOLICITANTE']);
   if (!user) return;
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  const isEditMode = pathParts[0] === 'editar-saf' && !!pathParts[1];
+  const editSafId = isEditMode ? pathParts[1] : '';
 
   const SISTEMAS_POR_TIPO = {
     MRO: ['1'],
@@ -557,10 +568,14 @@ document.addEventListener('DOMContentLoaded', async function () {
   let tipoSelecionado = 'ESTACAO';
   let subsistemasCache = [];
   let sistemasCache = [];
+  const sistemasPorTipoCache = new Map();
+  const subsistemasPorSistemaCache = new Map();
+  const locaisPorLinhaCache = new Map();
   const linhaOptionsPadrao = linhaSel.innerHTML;
   let _camStream = null;
   let avariaDataHoraTexto = '';
   window._capturedPhoto = null;
+  let safEdicaoOriginal = null;
   const searchableUiMap = new Map();
 
   function escHtml(value) {
@@ -569,6 +584,40 @@ document.addEventListener('DOMContentLoaded', async function () {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/\"/g, '&quot;');
+  }
+
+  function detectTipoBySistemaId(value) {
+    const sid = String(value || '').trim();
+    if (sid === '1') return 'MRO';
+    if (['3', '4', '6'].includes(sid)) return 'VIA';
+    return 'ESTACAO';
+  }
+
+  function parseDescricaoLongaCampos(texto) {
+    const map = new Map();
+    String(texto || '')
+      .split(/\r?\n+/)
+      .map(l => String(l || '').trim())
+      .filter(Boolean)
+      .forEach(linha => {
+        const idx = linha.indexOf(':');
+        if (idx <= 0) return;
+        const chave = normalizeText(linha.slice(0, idx));
+        const valor = String(linha.slice(idx + 1) || '').trim();
+        if (!chave || !valor) return;
+        map.set(chave, valor);
+      });
+    return map;
+  }
+
+  function findOptionValueByText(selectEl, text) {
+    const alvo = normalizeText(text || '');
+    if (!selectEl || !alvo) return '';
+    const options = [...selectEl.options].filter(o => String(o.value || '').trim() !== '');
+    const exata = options.find(o => normalizeText(o.textContent || '') === alvo);
+    if (exata) return String(exata.value || '');
+    const parcial = options.find(o => normalizeText(o.textContent || '').includes(alvo) || alvo.includes(normalizeText(o.textContent || '')));
+    return parcial ? String(parcial.value || '') : '';
   }
 
   function setNowReadOnlyDateTime() {
@@ -892,14 +941,25 @@ document.addEventListener('DOMContentLoaded', async function () {
     sistemaSel.disabled = true;
     sistemasCache = [];
 
-    const res = await API.sistemasPorTipo(tipo);
-    if (!res.ok || !res.data.sistemas?.length) {
+    let sistemas = sistemasPorTipoCache.get(tipo);
+    if (!sistemas) {
+      const res = await API.sistemasPorTipo(tipo);
+      if (!res.ok || !res.data.sistemas?.length) {
+        sistemaSel.innerHTML = '<option value=""></option>';
+        refreshSearchableSelect(sistemaSel);
+        return;
+      }
+      sistemas = res.data.sistemas;
+      sistemasPorTipoCache.set(tipo, sistemas);
+    }
+
+    if (!sistemas.length) {
       sistemaSel.innerHTML = '<option value=""></option>';
       refreshSearchableSelect(sistemaSel);
       return;
     }
 
-    sistemasCache = res.data.sistemas;
+    sistemasCache = sistemas;
     sistemaSel.innerHTML = '<option value=""></option>' + sistemasCache
       .map(item => `<option value="${escHtml(item.id)}" data-codigo="${escHtml(item.codigo || '')}">${escHtml(item.label || item.nome || item.id)}</option>`)
       .join('');
@@ -922,14 +982,25 @@ document.addEventListener('DOMContentLoaded', async function () {
       return;
     }
 
-    const res = await API.subsistemas(sistemaId);
-    if (!res.ok || !res.data.subsistemas?.length) {
+    let subsistemas = subsistemasPorSistemaCache.get(sistemaId);
+    if (!subsistemas) {
+      const res = await API.subsistemas(sistemaId);
+      if (!res.ok || !res.data.subsistemas?.length) {
+        subsistemaSel.innerHTML = '<option value=""></option>';
+        refreshSearchableSelect(subsistemaSel);
+        return;
+      }
+      subsistemas = res.data.subsistemas;
+      subsistemasPorSistemaCache.set(sistemaId, subsistemas);
+    }
+
+    if (!subsistemas.length) {
       subsistemaSel.innerHTML = '<option value=""></option>';
       refreshSearchableSelect(subsistemaSel);
       return;
     }
 
-    subsistemasCache = res.data.subsistemas;
+    subsistemasCache = subsistemas;
     subsistemaSel.innerHTML = '<option value=""></option>' +
       subsistemasCache.map(item => `<option value="${escHtml(item.id)}">${escHtml(item.nome || item.codigo || item.id)}</option>`).join('');
     subsistemaSel.disabled = false;
@@ -938,34 +1009,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   async function carregarFalhasPorSistema() {
     resetFalhaSelect();
-
-    const sistemaId = (sistemaSel.value || '').trim();
-    if (!sistemaId) return;
-
     falhaSel.innerHTML = '<option value=""></option>';
     falhaSel.disabled = true;
-
-    let res;
-    try {
-      if (API && typeof API.falhas === 'function') {
-        res = await API.falhas({ sistema_id: sistemaId });
-      } else {
-        res = await API.get(`/dados/falhas?sistema_id=${encodeURIComponent(sistemaId)}`);
-      }
-    } catch (_) {
-      res = { ok: false, data: {} };
-    }
-
-    if (!res.ok || !res.data.falhas?.length) {
-      falhaSel.innerHTML = '<option value=""></option>';
-      falhaSel.disabled = false;
-      refreshSearchableSelect(falhaSel);
-      return;
-    }
-
-    falhaSel.innerHTML = '<option value=""></option>' +
-      res.data.falhas.map(item => `<option value="${escHtml(item.id)}">${escHtml(item.label || item.descricao)}</option>`).join('');
-    falhaSel.disabled = false;
     refreshSearchableSelect(falhaSel);
   }
 
@@ -979,10 +1024,21 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (!linha) return;
 
-    const [trechoRes, estacaoRes] = await Promise.all([
-      API.opcoesFormulario({ tipo: 'trecho', linha }),
-      API.estacoes(linha),
-    ]);
+    let trechoRes;
+    let estacaoRes;
+    const cacheLinha = locaisPorLinhaCache.get(linha);
+    if (cacheLinha) {
+      trechoRes = cacheLinha.trechoRes;
+      estacaoRes = cacheLinha.estacaoRes;
+    } else {
+      [trechoRes, estacaoRes] = await Promise.all([
+        API.opcoesFormulario({ tipo: 'trecho', linha }),
+        API.estacoes(linha),
+      ]);
+      if (trechoRes?.ok || estacaoRes?.ok) {
+        locaisPorLinhaCache.set(linha, { trechoRes, estacaoRes });
+      }
+    }
 
     if (trechoRes.ok && trechoRes.data.opcoes?.length) {
       trechoSel.innerHTML = '<option value=""></option>' +
@@ -1038,6 +1094,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       if (isVia) {
         if (falhaWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(falhaWrap);
         if (prioridadeWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(prioridadeWrap);
+        estacaoRow2.style.display = 'grid';
 
         if (linhaWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(linhaWrap);
         if (viaWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(viaWrap);
@@ -1051,8 +1108,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         estacaoRow4.style.display = 'grid';
         trechoWrap.style.display = 'block';
       } else {
+        if (sistemaWrap.parentElement !== estacaoRow1) estacaoRow1.appendChild(sistemaWrap);
+        if (subsistemaWrap.parentElement !== estacaoRow1) estacaoRow1.appendChild(subsistemaWrap);
+        if (prioridadeWrap.parentElement !== estacaoRow1) estacaoRow1.appendChild(prioridadeWrap);
         if (falhaWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(falhaWrap);
-        if (prioridadeWrap.parentElement !== estacaoRow2) estacaoRow2.appendChild(prioridadeWrap);
+        estacaoRow2.style.display = 'none';
 
         if (linhaWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(linhaWrap);
         if (topEstacaoWrap.parentElement !== estacaoRow3) estacaoRow3.appendChild(topEstacaoWrap);
@@ -1232,7 +1292,6 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (tipo === 'MRO') {
       await carregarSubsistemas();
-      await carregarFalhasPorSistema();
       await carregarSeriesMro();
     } else {
       resetMroTrens();
@@ -1244,6 +1303,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   function checkFormValid() {
     const descricao = (descricaoInput.value || '').trim();
     const sistemaId = tipoSelecionado === 'MRO' ? '1' : (sistemaSel.value || '').trim();
+    const isEstacao = tipoSelecionado === 'ESTACAO';
     const isMro = tipoSelecionado === 'MRO';
     const isVia = tipoSelecionado === 'VIA';
     const isEstacaoSisComTrechoOpcional = tipoSelecionado === 'ESTACAO' && ['2', '5', '7', '8'].includes(sistemaId);
@@ -1261,12 +1321,15 @@ document.addEventListener('DOMContentLoaded', async function () {
       !!(tremSel.value || '').trim() &&
       !!(carroSel.value || '').trim()
     );
-    const formValido =
+    const equipamentoEstacaoPreenchido =
+      !!(equipamentoCurtoInput.value || '').trim() ||
+      !!(equipamentoAmvSel.value || '').trim();
+
+    let formValido =
       !!(linhaSel.value || '').trim() &&
       !!(prioSel.value || '').trim() &&
       !!sistemaId &&
       !!(subsistemaSel.value || '').trim() &&
-      !!(falhaSel.value || '').trim() &&
       (!trechoObrigatorio || !!(trechoSel.value || '').trim()) &&
       (!equipamentoObrigatorio || !!(equipamentoCurtoInput.value || '').trim()) &&
       (!viaObrigatoria || !!normalizeVia(viaInput.value)) &&
@@ -1275,7 +1338,20 @@ document.addEventListener('DOMContentLoaded', async function () {
       tremDataCompleta &&
       (!estacaoObrigatoria || !!(estacaoSel.value || '').trim()) &&
       descricao.length >= 3 &&
-      !!window._capturedPhoto;
+      (isEditMode ? true : !!window._capturedPhoto);
+
+    if (isEstacao) {
+      // Requisito do fluxo ESTACAO: somente campos da tela + foto sao obrigatorios.
+      formValido =
+        !!(sistemaSel.value || '').trim() &&
+        !!(subsistemaSel.value || '').trim() &&
+        !!(prioSel.value || '').trim() &&
+        !!(linhaSel.value || '').trim() &&
+        !!(estacaoSel.value || '').trim() &&
+        equipamentoEstacaoPreenchido &&
+        descricao.length >= 3 &&
+        (isEditMode ? true : !!window._capturedPhoto);
+    }
 
     document.getElementById('desc-error').style.display = descricao.length === 0 || descricao.length >= 3 ? 'none' : 'block';
     btnSubmit.disabled = !formValido;
@@ -1329,6 +1405,132 @@ document.addEventListener('DOMContentLoaded', async function () {
     ].filter(Boolean);
 
     return parts.length ? parts.join('-') : '';
+  }
+
+  async function carregarSafParaEdicao() {
+    if (!isEditMode || !editSafId) return;
+
+    const res = await API.buscarSaf(editSafId);
+    if (!res.ok) {
+      Toast.error(res.data?.erro || 'Nao foi possivel carregar a SAF para edicao.');
+      setTimeout(() => { window.location.href = '/minhassafs'; }, 1400);
+      return;
+    }
+
+    const saf = res.data?.solicitacao || {};
+    safEdicaoOriginal = saf;
+    if (String(saf.notificador_id || '') !== String(user.id || '')) {
+      Toast.error('Voce nao tem permissao para editar esta SAF.');
+      setTimeout(() => { window.location.href = '/minhassafs'; }, 1400);
+      return;
+    }
+    if (String(saf.status || '').toUpperCase() !== 'DEVOLVIDA') {
+      Toast.warning('Somente SAFs devolvidas podem ser reenviadas.');
+      setTimeout(() => { window.location.href = `/saf/${editSafId}`; }, 1200);
+      return;
+    }
+
+    const camposDescricao = parseDescricaoLongaCampos(saf.descricao_longa);
+    const tipo = detectTipoBySistemaId(saf.sistema_id);
+    await setTipo(tipo);
+
+    const pageTitle = document.querySelector('.page-title');
+    const pageSubtitle = document.querySelector('.page-subtitle');
+    if (pageTitle) pageTitle.textContent = 'Corrigir e reenviar SAF';
+    if (pageSubtitle) pageSubtitle.textContent = `Revise os dados da ${Fmt.ticket(saf.ticket_saf)} e envie novamente para o CCM.`;
+    btnSubmit.textContent = 'Salvar e Reenviar';
+
+    const prioridade = String(saf.prioridade || '').trim().toUpperCase();
+    if (prioridade && [...prioSel.options].some(o => String(o.value || '').toUpperCase() === prioridade)) {
+      prioSel.value = prioridade;
+      prioridadeHidden.value = prioridade;
+    }
+
+    const linhaDesc = String(camposDescricao.get('LINHA') || '').replace(/\D/g, '').slice(0, 2);
+    if (linhaDesc && [...linhaSel.options].some(o => String(o.value || '') === linhaDesc)) {
+      linhaSel.value = linhaDesc;
+    }
+    await carregarLocalPorLinha();
+
+    const sistemaId = String(saf.sistema_id || '').trim();
+    const sistemaTexto = String(camposDescricao.get('SISTEMA') || '').trim();
+    let sistemaValue = '';
+    if (sistemaId && [...sistemaSel.options].some(o => String(o.value || '') === sistemaId)) {
+      sistemaValue = sistemaId;
+    } else {
+      sistemaValue = findOptionValueByText(sistemaSel, sistemaTexto);
+    }
+    if (sistemaValue) {
+      sistemaSel.value = sistemaValue;
+      sistemaIdHidden.value = sistemaValue;
+      await carregarSubsistemas();
+    }
+
+    const subsistemaId = String(saf.subsistema_id || '').trim();
+    const subsistemaTexto = String(camposDescricao.get('SUBSISTEMA') || '').trim();
+    let subsistemaValue = '';
+    if (subsistemaId && [...subsistemaSel.options].some(o => String(o.value || '') === subsistemaId)) {
+      subsistemaValue = subsistemaId;
+    } else {
+      subsistemaValue = findOptionValueByText(subsistemaSel, subsistemaTexto);
+    }
+    if (subsistemaValue) {
+      subsistemaSel.value = subsistemaValue;
+      subsistemaIdHidden.value = subsistemaValue;
+      await atualizarCampoEquipamentoPorSubsistema();
+    }
+
+    const localId = String(saf.local_instalacao_id || '').trim();
+    const estacaoTexto = String(camposDescricao.get('ESTACAO') || '').trim();
+    const trechoTexto = String(camposDescricao.get('TRECHO') || '').trim();
+    if (tipo === 'VIA') {
+      if (localId && [...trechoSel.options].some(o => String(o.value || '') === localId)) {
+        trechoSel.value = localId;
+      } else {
+        const trechoValue = findOptionValueByText(trechoSel, trechoTexto);
+        if (trechoValue) trechoSel.value = trechoValue;
+      }
+      viaInput.value = normalizeVia(saf.via_numero || camposDescricao.get('VIA') || '');
+      kmInicialInput.value = formatKmInput(saf.km_inicial || camposDescricao.get('KM INICIAL') || '');
+      kmFinalInput.value = formatKmInput(saf.km_final || camposDescricao.get('KM FINAL') || '');
+      viaNumeroHidden.value = viaInput.value;
+      kmInicialHidden.value = kmInicialInput.value;
+      kmFinalHidden.value = kmFinalInput.value;
+      localInstalacaoIdHidden.value = trechoSel.value || localId;
+      localInstalacaoNomeHidden.value = trechoSel.options[trechoSel.selectedIndex]?.textContent || saf.local_instalacao || '';
+    } else {
+      if (localId && [...estacaoSel.options].some(o => String(o.value || '') === localId)) {
+        estacaoSel.value = localId;
+      } else {
+        const estacaoValue = findOptionValueByText(estacaoSel, estacaoTexto);
+        if (estacaoValue) estacaoSel.value = estacaoValue;
+      }
+      localInstalacaoIdHidden.value = estacaoSel.value || localId;
+      const estSel = estacaoSel.options[estacaoSel.selectedIndex] || null;
+      localInstalacaoNomeHidden.value = estSel ? String(estSel.dataset.nome || estSel.textContent || '').trim() : (saf.local_instalacao || '');
+    }
+
+    descricaoInput.value = String(camposDescricao.get('DESCRICAO') || '').trim();
+    equipamentoCurtoInput.value = String(saf.equipamento || camposDescricao.get('EQUIPAMENTO') || '').trim();
+    document.getElementById('equipamento_nome').value = equipamentoCurtoInput.value;
+    document.getElementById('equipamento_id').value = String(saf.equipamento_id || '').trim();
+
+    if (saf.anexo_evidencia_url) {
+      window._capturedPhoto = { dataUrl: saf.anexo_evidencia_url, gps: null, existing: true };
+      document.getElementById('cam-photo-preview').src = saf.anexo_evidencia_url;
+      document.getElementById('cam-no-photo').classList.add('hidden');
+      document.getElementById('cam-photo-result').classList.remove('hidden');
+      document.getElementById('btn-ver-mapa').style.display = 'none';
+      document.getElementById('btn-ver-mapa').href = '#';
+    }
+
+    refreshSearchableSelect(linhaSel);
+    refreshSearchableSelect(prioSel);
+    refreshSearchableSelect(sistemaSel);
+    refreshSearchableSelect(subsistemaSel);
+    refreshSearchableSelect(trechoSel);
+    refreshSearchableSelect(estacaoSel);
+    checkFormValid();
   }
 
   async function openCamera() {
@@ -1421,7 +1623,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     sistemaIdHidden.value = sistemaId;
     subsistemaIdHidden.value = '';
     await carregarSubsistemas();
-    await carregarFalhasPorSistema();
     checkFormValid();
   });
 
@@ -1438,7 +1639,6 @@ document.addEventListener('DOMContentLoaded', async function () {
   subsistemaSel.addEventListener('change', async function () {
     const subsistemaId = (this.value || '').trim();
     subsistemaIdHidden.value = subsistemaId;
-    await carregarFalhasPorSistema();
     await atualizarCampoEquipamentoPorSubsistema();
     checkFormValid();
   });
@@ -1480,7 +1680,6 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   descricaoInput.addEventListener('input', checkFormValid);
   equipamentoCurtoInput.addEventListener('input', function () {
-    this.value = String(this.value || '').slice(0, 12);
     document.getElementById('equipamento_nome').value = this.value.trim();
     checkFormValid();
   });
@@ -1531,7 +1730,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     const subsistemaNome = (subsistemaSel.options[subsistemaSel.selectedIndex]?.textContent || '').trim();
-    const falhaNome = (falhaSel.options[falhaSel.selectedIndex]?.textContent || '').trim();
+    const sistemaNome = (sistemaSel.options[sistemaSel.selectedIndex]?.textContent || '').trim();
     const trechoNome = (trechoSel.options[trechoSel.selectedIndex]?.textContent || '').trim();
     const estacaoNome = (estacaoSel.options[estacaoSel.selectedIndex]?.textContent || '').trim();
     const serieMro = (serieSel.options[serieSel.selectedIndex]?.textContent || '').trim();
@@ -1547,9 +1746,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const descricaoLonga = [
       `Data/Hora da avaria: ${avariaDataHoraTexto}`,
       `Linha: ${linhaSel.value}`,
-      `Sistema: ${tipoSelecionado}`,
+      `Sistema: ${sistemaNome || tipoSelecionado}`,
       `Subsistema: ${subsistemaNome}`,
-      `Falha: ${falhaNome}`,
       `Trecho: ${trechoNome}`,
       viaNumero ? `Via: ${viaNumero}` : '',
       kmInicial ? `KM Inicial: ${kmInicial}` : '',
@@ -1564,13 +1762,14 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const equipamentoMro = [serieMro, tremMro, carroMro].filter(Boolean).join(' / ');
 
-    const titulo = limparTitulo(falhaNome || descricao).substring(0, 40) || 'Falha reportada';
+    const tituloBase = subsistemaNome ? `Falha em ${subsistemaNome}` : 'Falha reportada';
+    const titulo = limparTitulo(tituloBase).substring(0, 40) || 'Falha reportada';
     document.getElementById('titulo_falha').value = titulo;
 
     const localInstalacaoId =
       tipoSelecionado === 'VIA'
         ? ((trechoSel.value || '').trim() || localInstalacaoIdHidden.value || null)
-        : (localInstalacaoIdHidden.value || null);
+        : ((estacaoSel.value || '').trim() || localInstalacaoIdHidden.value || null);
     const localInstalacaoCodigo = composeLocalInstalacaoCodigo();
     const localInstalacaoNome =
       tipoSelecionado === 'VIA'
@@ -1596,25 +1795,64 @@ document.addEventListener('DOMContentLoaded', async function () {
       km_final: kmFinal || null,
       data_inicio_avaria: dataInicioHidden.value,
       hora_inicio_avaria: horaInicioHidden.value,
-      foto_base64: window._capturedPhoto.dataUrl,
+      foto_base64: window._capturedPhoto?.dataUrl || null,
       foto_lat: document.getElementById('foto_lat').value || null,
       foto_lng: document.getElementById('foto_lng').value || null,
       foto_acc: document.getElementById('foto_acc').value || null,
     };
 
-    setLoading(btnSubmit, true, 'Enviando...');
-    const res = await API.criarSaf(payload);
-    setLoading(btnSubmit, false, 'Enviar Solicitacao');
+    const payloadEdicao = {
+      titulo_falha: payload.titulo_falha,
+      descricao_longa: payload.descricao_longa,
+      local_instalacao_id: payload.local_instalacao_id || safEdicaoOriginal?.local_instalacao_id || null,
+      local_instalacao: payload.local_instalacao || safEdicaoOriginal?.local_instalacao || null,
+      equipamento_id: payload.equipamento_id || safEdicaoOriginal?.equipamento_id || null,
+      equipamento: payload.equipamento || safEdicaoOriginal?.equipamento || null,
+      sistema_id: payload.sistema_id || String(safEdicaoOriginal?.sistema_id || '').trim() || null,
+      subsistema_id: payload.subsistema_id || String(safEdicaoOriginal?.subsistema_id || '').trim() || null,
+      sintoma_id: payload.sintoma_id || safEdicaoOriginal?.sintoma_id || null,
+      prioridade: payload.prioridade || safEdicaoOriginal?.prioridade || 'ALTA',
+      via_numero: payload.via_numero,
+      km_inicial: payload.km_inicial,
+      km_final: payload.km_final,
+      data_inicio_avaria: payload.data_inicio_avaria,
+      hora_inicio_avaria: payload.hora_inicio_avaria,
+    };
+
+    const acaoLabel = isEditMode ? 'Salvando...' : 'Enviando...';
+    setLoading(btnSubmit, true, acaoLabel);
+    const res = isEditMode
+      ? await API.editarSaf(editSafId, payloadEdicao)
+      : await API.criarSaf(payload);
+    setLoading(btnSubmit, false, isEditMode ? 'Salvar e Reenviar' : 'Enviar Solicitacao');
 
     if (res.ok) {
-      Toast.success(`${res.data.ticket || 'SAF'} criada com sucesso!`);
+      Toast.success(isEditMode ? 'SAF atualizada e reenviada para o CCM.' : `${res.data.ticket || 'SAF'} criada com sucesso!`);
       setTimeout(() => {
         window.location.href = '/minhassafs';
       }, 1500);
       return;
     }
 
-    Toast.error(res.data.erro || 'Erro ao criar SAF. Tente novamente.');
+    console.error('[NOVA_SAF][CRIAR][ERRO]', {
+      status: res.status,
+      request_id: res.data?.request_id,
+      erro: res.data?.erro,
+      detalhes: res.data?.detalhes,
+      payload_resumo: {
+        tipo: tipoSelecionado,
+        sistema_id: payload.sistema_id,
+        subsistema_id: payload.subsistema_id,
+        local_instalacao_id: payload.local_instalacao_id,
+        equipamento: payload.equipamento,
+      },
+    });
+
+    const reqIdMsg = res.data?.request_id ? ` (Ref: ${res.data.request_id})` : '';
+    Toast.error(res.data.erro || (isEditMode ? 'Erro ao reenviar SAF. Tente novamente.' : 'Erro ao criar SAF. Tente novamente.'));
+    if (res.data?.detalhes) {
+      Toast.warning(`Detalhes tecnicos disponiveis no console${reqIdMsg}`);
+    }
   });
 
   setNowReadOnlyDateTime();
@@ -1629,6 +1867,9 @@ document.addEventListener('DOMContentLoaded', async function () {
   await carregarLocalPorLinha();
   await atualizarCampoEquipamentoPorSubsistema();
   atualizarLayoutPorTipo();
+  if (isEditMode) {
+    await carregarSafParaEdicao();
+  }
   checkFormValid();
 });
 </script>
