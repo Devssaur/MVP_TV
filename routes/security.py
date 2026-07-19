@@ -71,7 +71,7 @@ def get_current_user_context() -> dict[str, Any]:
     try:
         perfil_resp = (
             service_sb.table('usuarios')
-            .select('id, nome, email, perfil, aprovado, empresa, area')
+            .select('id, nome, email, perfil, usando_como, aprovado, empresa, area')
             .eq('id', user_id)
             .maybe_single()
             .execute()
@@ -84,11 +84,13 @@ def get_current_user_context() -> dict[str, Any]:
     if not perfil_data.get('aprovado'):
         raise AuthzError('Acesso pendente. Aguarde aprovacao do administrador.')
 
+    modo_atual = perfil_data.get('usando_como') or perfil_data.get('perfil')
+
     ctx = {
         'id': user_id,
         'email': getattr(auth_user, 'email', None),
         'perfil': perfil_data.get('perfil'),
-        'usando_como': perfil_data.get('perfil'),
+        'usando_como': modo_atual,
         'nome': perfil_data.get('nome'),
         'empresa': perfil_data.get('empresa'),
         'area': perfil_data.get('area'),
@@ -112,7 +114,8 @@ def require_auth(allowed_profiles: tuple[str, ...] | None = None) -> Callable:
             except Exception:
                 return _safe_error('Falha ao validar autenticacao.', 500)
 
-            if allowed_profiles and user.get('perfil') not in allowed_profiles:
+            perfil_efetivo = user.get('usando_como') or user.get('perfil')
+            if allowed_profiles and perfil_efetivo not in allowed_profiles:
                 return _safe_error('Acesso negado para este recurso.', 403)
             return fn(*args, **kwargs)
 
