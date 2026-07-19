@@ -1,0 +1,58 @@
+name: Bump App Version
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump patch version
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "0.0.0" > VERSION
+          fi
+
+          current_version=$(tr -d ' \n\r\t' < VERSION)
+
+          if ! [[ "$current_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Formato invalido em VERSION: $current_version"
+            exit 1
+          fi
+
+          major=${BASH_REMATCH[1]}
+          minor=${BASH_REMATCH[2]}
+          patch=${BASH_REMATCH[3]}
+          next_patch=$((patch + 1))
+          next_version="${major}.${minor}.${next_patch}"
+
+          echo "$next_version" > VERSION
+          echo "NEXT_VERSION=$next_version" >> "$GITHUB_ENV"
+
+      - name: Commit and push bump
+        run: |
+          if git diff --quiet -- VERSION; then
+            echo "Nenhuma mudanca de versao para publicar."
+            exit 0
+          fi
+
+          git add VERSION
+          git commit -m "chore: bump version to ${NEXT_VERSION} [skip ci]"
+          git push

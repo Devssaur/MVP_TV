@@ -67,8 +67,7 @@ const Auth = (() => {
     const normalizedPerfil = normalizeProfile(user.perfil);
     const normalizedAllowedProfiles = (allowedProfiles || []).map(profile => normalizeProfile(profile));
     const isAllowedByView = normalizedAllowedProfiles.includes(currentMode);
-    const isAllowedByBaseProfile = normalizedAllowedProfiles.includes(normalizedPerfil);
-    if (allowedProfiles && !isAllowedByView && !isAllowedByBaseProfile) {
+    if (allowedProfiles && !isAllowedByView) {
       window.location.href = '/acesso-negado';
       return null;
     }
@@ -153,6 +152,7 @@ const API = (() => {
 
     // Auth
     login: (email, senha) => request('POST', '/auth/login', { email, senha }),
+    atualizarModoVisualizacao: (modo) => request('PUT', '/auth/modo-visualizacao', { modo }),
 
     // Solicitações
     minhasSafs:   (uid)   => request('GET', `/solicitacoes/minhassafs/${uid}`),
@@ -480,12 +480,25 @@ function _setupSidebar(user) {
     const DEST = { SOLICITANTE: '/minhassafs', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
     devSelect.value = getCurrentMode(user);
     devSelect.title = 'Trocar a visualização atual do sistema';
-    devSelect.onchange = function () {
+    devSelect.onchange = async function () {
       const appPerfil = this.value;
       if (!appPerfil) return;
-      const nextUser = { ...user, usando_como: appPerfil, perfil: user.perfil };
+      const previousMode = getCurrentMode(user);
+      this.disabled = true;
+
+      const res = await API.atualizarModoVisualizacao(appPerfil);
+      this.disabled = false;
+
+      if (!res.ok) {
+        this.value = previousMode;
+        Toast.error((res.data && res.data.erro) || 'Nao foi possivel trocar a visualizacao.');
+        return;
+      }
+
+      const persistedMode = normalizeProfile((res.data && res.data.usando_como) || appPerfil);
+      const nextUser = { ...user, usando_como: persistedMode, perfil: user.perfil };
       Auth.setUser(nextUser);
-      window.location.href = DEST[appPerfil] || '/';
+      window.location.href = DEST[persistedMode] || DEST[appPerfil] || '/';
     };
   }
 }
