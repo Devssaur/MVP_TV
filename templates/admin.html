@@ -181,7 +181,16 @@
 document.addEventListener('DOMContentLoaded', async function () {
   const user = Auth.requireAuth(['ADMIN']);
   if (!user) return;
-  window.__adminUser = user;
+
+  const syncAdminMode = await API.atualizarModoVisualizacao('ADMIN');
+  if (!syncAdminMode.ok) {
+    Toast.error((syncAdminMode.data && syncAdminMode.data.erro) || 'Nao foi possivel validar acesso administrativo.');
+    return;
+  }
+
+  const syncedUser = { ...user, usando_como: 'ADMIN' };
+  Auth.setUser(syncedUser);
+  window.__adminUser = syncedUser;
 
   let allLogs      = [];
   let allUsuarios  = [];

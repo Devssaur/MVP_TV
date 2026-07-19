@@ -1,10 +1,12 @@
 import os
 import logging
+from pathlib import Path
 from flask import Flask, render_template
 from dotenv import load_dotenv
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(BASE_DIR, ".env")
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+VERSION_PATH = BASE_DIR / "VERSION"
 
 # Carrega as variaveis antes de importar modulos que dependem delas.
 # override=True evita que variaveis antigas do shell mascararem valores do .env.
@@ -19,11 +21,26 @@ from routes.admin import admin_bp
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
+
+def _load_app_version() -> str:
+    env_version = os.environ.get("APP_VERSION", "").strip()
+    if env_version:
+        return env_version
+
+    try:
+        version = VERSION_PATH.read_text(encoding="utf-8").strip()
+        return version or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
+APP_VERSION = _load_app_version()
+
 # ── Contexto global (disponível em todos os templates) ───────
 @app.context_processor
 def inject_globals():
     dev_mode = os.environ.get('DEV_MODE', '').lower() in ('1', 'true', 'yes')
-    return dict(dev_mode=dev_mode)
+    return dict(dev_mode=dev_mode, app_version=APP_VERSION)
 
 # ── Registro de Rotas API ──────────────────────────────────
 app.register_blueprint(auth_bp,          url_prefix='/api/auth')

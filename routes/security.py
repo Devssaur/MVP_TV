@@ -10,6 +10,18 @@ class AuthzError(Exception):
     pass
 
 
+def _normalize_profile(value: str | None) -> str:
+    normalized = (value or '').strip().upper()
+    aliases = {
+        'ADMINISTRADOR': 'ADMIN',
+        'ADMIN': 'ADMIN',
+        'SOLICITANTE': 'SOLICITANTE',
+        'CCM': 'CCM',
+        'SIC': 'SIC',
+    }
+    return aliases.get(normalized, normalized)
+
+
 def _safe_error(message: str, status: int):
     return jsonify({'erro': message}), status
 
@@ -114,8 +126,9 @@ def require_auth(allowed_profiles: tuple[str, ...] | None = None) -> Callable:
             except Exception:
                 return _safe_error('Falha ao validar autenticacao.', 500)
 
-            perfil_efetivo = user.get('usando_como') or user.get('perfil')
-            if allowed_profiles and perfil_efetivo not in allowed_profiles:
+            perfil_efetivo = _normalize_profile(user.get('usando_como') or user.get('perfil'))
+            perfis_permitidos = {_normalize_profile(profile) for profile in (allowed_profiles or ())}
+            if allowed_profiles and perfil_efetivo not in perfis_permitidos:
                 return _safe_error('Acesso negado para este recurso.', 403)
             return fn(*args, **kwargs)
 

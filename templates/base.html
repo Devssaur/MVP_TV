@@ -27,7 +27,10 @@
   </div>
   <!-- Row 2: Nav tabs (navy) -->
   <nav class="toolbar-nav" id="toolbar-nav">
-    {% block toolbar_nav %}{% endblock %}
+    <div class="toolbar-nav-links">
+      {% block toolbar_nav %}{% endblock %}
+    </div>
+    <span class="toolbar-version" aria-label="Versao da aplicacao">v{{ app_version }}</span>
   </nav>
 </header>
 
