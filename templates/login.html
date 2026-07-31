@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/saf.css') }}">
   <style>
     /* ── Page layout ───────────────────────────────── */
-    html, body { overflow: hidden; }
+    html, body { overflow: auto; }
     body { background: var(--surface); }
     .login-wrap {
       min-height: calc(100vh - var(--toolbar-h));
@@ -16,6 +16,7 @@
       align-items: center;
       justify-content: center;
       padding: 2rem 1rem;
+      overflow-y: auto;
     }
 
     /* ── Card ──────────────────────────────────────── */

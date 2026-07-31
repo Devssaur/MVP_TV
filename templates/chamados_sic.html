@@ -49,7 +49,7 @@
   </div>
 
   <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem;">
-    <input id="sic-search" type="search" class="form-control" placeholder="Pesquisar por numero da ordem" style="min-width:280px;max-width:560px;flex:1;">
+    <input id="sic-search" type="search" class="form-control" placeholder="Pesquisar por numero da ocorrencia" style="min-width:280px;max-width:560px;flex:1;">
     <label for="sic-days-range" style="font-size:.82rem;color:var(--text-muted);font-weight:600;">Periodo</label>
     <select id="sic-days-range" class="form-control" style="width:170px;">
       <option value="7">Ultimos 7 dias</option>
@@ -92,9 +92,8 @@ document.addEventListener('DOMContentLoaded', async function () {
   let pageSize = 50;
   let currentPage = 1;
 
-  function parseOrderNumber(saf) {
-    const integ = saf.saf_integracao_sap || {};
-    return String(saf.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
+  function parseOccurrenceNumber(saf) {
+    return String(saf.numero_ocorrencia || '').trim();
   }
 
   function withinDays(isoDateStr, days) {
@@ -150,7 +149,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       if (activeFilter !== 'TODAS' && st !== activeFilter) return false;
       if (!withinDays(s.criado_em, activeDaysRange)) return false;
       if (!q) return true;
-      return parseOrderNumber(s).toLowerCase().includes(q);
+      return parseOccurrenceNumber(s).toLowerCase().includes(q);
     });
   }
 
@@ -170,19 +169,20 @@ document.addEventListener('DOMContentLoaded', async function () {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
     const now = new Date();
     const filtro = activeFilter === 'TODAS' ? 'Todas' : activeFilter;
-    const busca = (activeSearch || '').trim() || 'Sem busca de ordem';
+    const busca = (activeSearch || '').trim() || 'Sem busca de ocorrência';
 
     doc.setFontSize(13);
     doc.text('Chamados SIC - Tabela visivel', 40, 34);
     doc.setFontSize(9);
     doc.text(`Gerado em: ${now.toLocaleString('pt-BR')}`, 40, 50);
-    doc.text(`Filtro: ${filtro} | Ordem: ${busca} | Periodo: ${activeDaysRange === '0' ? 'Completo' : `Ultimos ${activeDaysRange} dias`} | Total: ${data.length}`, 40, 64);
+    doc.text(`Filtro: ${filtro} | Ocorrência: ${busca} | Periodo: ${activeDaysRange === '0' ? 'Completo' : `Ultimos ${activeDaysRange} dias`} | Total: ${data.length}`, 40, 64);
 
     const body = data.map(s => {
       const integ = s.saf_integracao_sap || {};
       const st = getStatus(s);
       const nota = integ.qmnum ? `${integ.tipo_nota || ''} ${integ.qmnum}`.trim() : '-';
       const ordem = (integ.aufnr || integ.numero_ordem_sap || '-');
+      const ocorrencia = parseOccurrenceNumber(s) || '-';
       return [
         s.ticket_saf ? `SAF #${String(s.ticket_saf).padStart(6, '0')}` : '-',
         Fmt.statusLabel(st),
@@ -192,6 +192,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         s.notificador_nome || '-',
         Fmt.prioLabel(s.prioridade || 'MEDIA'),
         nota,
+        ocorrencia,
         ordem,
         Fmt.date(s.criado_em),
       ];
@@ -199,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     doc.autoTable({
       startY: 78,
-      head: [['Ticket', 'Status', 'Titulo', 'Equipamento', 'Local', 'Notificador', 'Prioridade', 'Nota', 'Ordem', 'Criado em']],
+      head: [['Ticket', 'Status', 'Titulo', 'Equipamento', 'Local', 'Notificador', 'Prioridade', 'Nota', 'N° Ocorrência', 'Ordem', 'Criado em']],
       body,
       styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
       headStyles: { fillColor: [30, 58, 95] },
@@ -268,6 +269,9 @@ document.addEventListener('DOMContentLoaded', async function () {
       const ordem = (integ.aufnr || integ.numero_ordem_sap)
         ? `<span class="font-mono" style="font-size:.8rem;">${integ.aufnr || integ.numero_ordem_sap}</span>`
         : '<span class="text-muted">-</span>';
+      const ocorrencia = parseOccurrenceNumber(s)
+        ? `<span class="font-mono" style="font-size:.8rem;">${parseOccurrenceNumber(s)}</span>`
+        : '<span class="text-muted">-</span>';
       return `
         <tr class="clickable" onclick="window.location.href='/saf/${s.id}'">
           <td>${Fmt.ticket(s.ticket_saf)}</td>
@@ -278,6 +282,7 @@ document.addEventListener('DOMContentLoaded', async function () {
           <td>${s.notificador_nome || '-'}</td>
           <td>${Fmt.prioBadge(s.prioridade || 'MEDIA')}</td>
           <td>${nota}</td>
+          <td>${ocorrencia}</td>
           <td>${ordem}</td>
           <td class="text-muted text-sm">${Fmt.date(s.criado_em)}</td>
         </tr>`;
@@ -295,6 +300,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             <th>Notificador</th>
             <th>Prioridade</th>
             <th>Nota</th>
+            <th>N° Ocorrência</th>
             <th>Ordem</th>
             <th>Criado em</th>
           </tr>

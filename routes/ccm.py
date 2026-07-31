@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 import os
 import logging
+import re
+import unicodedata
 from supabase import create_client, Client
 from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -38,6 +40,7 @@ class AvaliarSafPayload(BaseModel):
     motivo_cancelamento: str | None = None
     centro_trabalho: str | None = Field(default=None, max_length=120)
     sintoma_id: str | None = Field(default=None, max_length=100)
+    sintoma_descricao: str | None = Field(default=None, max_length=500)
     ids_duplicatas: list[str] | None = None
 
 
@@ -55,10 +58,16 @@ def _get_supabase_client() -> Client:
 def _normalize_prioridade(valor) -> str:
     p = str(valor or '').strip().upper()
     mapping = {
-        '1': 'BAIXA',
-        '2': 'MEDIA',
-        '3': 'ALTA',
-        '4': 'CRITICA',
+        '1': 'CRITICA',
+        '2': 'ALTA',
+        '3': 'MEDIA',
+        '4': 'BAIXA',
+        'MUITO ELEVADO': 'CRITICA',
+        'MUITO ELEVADA': 'CRITICA',
+        'ELEVADO': 'ALTA',
+        'ELEVADA': 'ALTA',
+        'MEDIO': 'MEDIA',
+        'MÉDIO': 'MEDIA',
         'BAIXA': 'BAIXA',
         'MEDIA': 'MEDIA',
         'MÉDIA': 'MEDIA',
@@ -103,8 +112,32 @@ def _resolver_sintoma_catalogo_id(supabase: Client, sintoma_id_raw: str | None) 
     if not descricao:
         return None
 
-    # 3) Tenta casar no catalogo por descricao (preferencia exata, fallback ilike).
-    cat_by_desc = (
+    # 3) Match por descricao no catalogo.
+    by_desc = _resolver_sintoma_catalogo_por_descricao(supabase, descricao)
+    if by_desc:
+        return by_desc
+
+    # 4) Fallback por codigo/codigo_item para compatibilidade de payloads legados.
+    cat_by_code = (
+        supabase.table('sintomas_catalogo')
+        .select('id, codigo, codigo_item')
+        .eq('ativo', True)
+        .or_(f'codigo.eq.{sintoma_id},codigo_item.eq.{sintoma_id}')
+        .limit(1)
+        .execute()
+    )
+    if cat_by_code.data:
+        return str((cat_by_code.data[0] or {}).get('id') or '').strip() or None
+
+    return None
+
+def _resolver_sintoma_catalogo_por_descricao(supabase: Client, descricao_raw: str | None) -> str | None:
+    descricao = str(descricao_raw or '').strip()
+    if not descricao:
+        return None
+
+    # Preferencia por match exato.
+    exato = (
         supabase.table('sintomas_catalogo')
         .select('id, descricao')
         .eq('ativo', True)
@@ -112,10 +145,11 @@ def _resolver_sintoma_catalogo_id(supabase: Client, sintoma_id_raw: str | None) 
         .limit(1)
         .execute()
     )
-    if cat_by_desc.data:
-        return str((cat_by_desc.data[0] or {}).get('id') or '').strip() or None
+    if exato.data:
+        return str((exato.data[0] or {}).get('id') or '').strip() or None
 
-    cat_by_desc_ilike = (
+    # Fallback ilike.
+    ilike = (
         supabase.table('sintomas_catalogo')
         .select('id, descricao')
         .eq('ativo', True)
@@ -123,10 +157,87 @@ def _resolver_sintoma_catalogo_id(supabase: Client, sintoma_id_raw: str | None) 
         .limit(1)
         .execute()
     )
-    if cat_by_desc_ilike.data:
-        return str((cat_by_desc_ilike.data[0] or {}).get('id') or '').strip() or None
+    if ilike.data:
+        return str((ilike.data[0] or {}).get('id') or '').strip() or None
+
+    # Fallback normalizado (acento/pontuacao/espacos).
+    def _norm_text(value: str) -> str:
+        base = unicodedata.normalize('NFD', str(value or ''))
+        sem_acentos = ''.join(ch for ch in base if unicodedata.category(ch) != 'Mn')
+        lowered = sem_acentos.lower()
+        cleaned = re.sub(r'[^a-z0-9]+', ' ', lowered)
+        return re.sub(r'\s+', ' ', cleaned).strip()
+
+    alvo = _norm_text(descricao)
+    if not alvo:
+        return None
+
+    cat_all = (
+        supabase.table('sintomas_catalogo')
+        .select('id, descricao')
+        .eq('ativo', True)
+        .limit(2000)
+        .execute()
+    )
+    for row in (cat_all.data or []):
+        if _norm_text(row.get('descricao') or '') == alvo:
+            return str(row.get('id') or '').strip() or None
 
     return None
+
+
+def _extrair_sintoma_do_texto_longo(texto_longo_raw: str | None) -> str:
+    texto = str(texto_longo_raw or '')
+    if not texto:
+        return ''
+    m = re.search(r'SINTOMA:\s*([^,\n\r]+)', texto, flags=re.IGNORECASE)
+    return str(m.group(1)).strip() if m and m.group(1) else ''
+
+
+def _espelhar_sintoma_legacy_no_catalogo(supabase: Client, sintoma_id: str) -> bool:
+    """Cria/atualiza um espelho tecnico em sintomas_catalogo para satisfazer a FK atual.
+
+    Regra de negocio segue usando id da tabela sintomas; este espelho evita falha de integridade
+    enquanto o schema ainda referencia sintomas_catalogo.
+    """
+    sid = str(sintoma_id or '').strip()
+    if not sid:
+        return False
+
+    sint = (
+        supabase.table('sintomas')
+        .select('id, descricao, grupo_id, ativo')
+        .eq('id', sid)
+        .limit(1)
+        .execute()
+    )
+    row = (sint.data or [{}])[0]
+    if not row or not row.get('id'):
+        return False
+
+    grupo_codigo = None
+    grupo_id = row.get('grupo_id')
+    if grupo_id:
+        grp = (
+            supabase.table('grupos')
+            .select('codigo')
+            .eq('id', grupo_id)
+            .limit(1)
+            .execute()
+        )
+        grp_row = (grp.data or [{}])[0]
+        grupo_codigo = str(grp_row.get('codigo') or '').strip() or None
+
+    payload = {
+        'id': sid,
+        'descricao': str(row.get('descricao') or '').strip(),
+        'ativo': bool(row.get('ativo', True)),
+    }
+    if grupo_codigo:
+        payload['grupo'] = grupo_codigo
+
+    supabase.table('sintomas_catalogo').upsert(payload).execute()
+    return True
 
 
 # ==========================================
@@ -139,7 +250,7 @@ def listar_pendentes():
         supabase = _get_supabase_client()
         resposta = supabase.table('saf_solicitacoes') \
             .select(
-                'id, ticket_saf, titulo_falha, descricao_longa, '
+                'id, ticket_saf, titulo_falha, descricao_longa, numero_ocorrencia, '
                 'local_instalacao, local_instalacao_id, equipamento, equipamento_id, '
                 'sistema_id, subsistema_id, '
                 'via_numero, km_inicial, km_final, '
@@ -231,17 +342,29 @@ def avaliar_saf(solicitacao_id):
 
     try:
         supabase = _get_supabase_client()
-        sintoma_id_resolvido = None
+        sintoma_id_para_gravar = None
         sintoma_id_original = (payload.sintoma_id or '').strip() or None
         if payload.sintoma_id is not None:
-            sintoma_id_resolvido = _resolver_sintoma_catalogo_id(supabase, payload.sintoma_id)
-            if sintoma_id_original and not sintoma_id_resolvido:
+            sintoma_id_para_gravar = sintoma_id_original
+            if sintoma_id_original:
+                sintoma_legado = (
+                    supabase.table('sintomas')
+                    .select('id')
+                    .eq('id', sintoma_id_original)
+                    .limit(1)
+                    .execute()
+                )
+                if not sintoma_legado.data:
+                    sintoma_id_para_gravar = None
+            if sintoma_id_original and not sintoma_id_para_gravar:
                 logger.warning(
-                    '[AVALIAR_SAF][%s] sintoma_id sem correspondencia em sintomas_catalogo; segue com sintoma_id nulo. solicitacao_id=%s sintoma_id=%s',
+                    '[AVALIAR_SAF][%s] sintoma_id sem correspondencia em sintomas. solicitacao_id=%s sintoma_id=%s',
                     request_id,
                     solicitacao_id,
                     sintoma_id_original,
                 )
+        if novo_status == 'APROVADA' and sintoma_id_original and not sintoma_id_para_gravar:
+            return jsonify({'erro': 'Sintoma invalido para gravacao. Selecione um sintoma valido da lista.'}), 400
 
         update_data = {
             "status": novo_status,
@@ -255,7 +378,7 @@ def avaliar_saf(solicitacao_id):
         if novo_status == 'CANCELADA':
             update_data['motivo_cancelamento'] = (payload.motivo_cancelamento or '').strip()
         if payload.sintoma_id is not None:
-            update_data['sintoma_id'] = sintoma_id_resolvido
+            update_data['sintoma_id'] = sintoma_id_para_gravar
 
         centro_info = None
         if novo_status == 'APROVADA':
@@ -272,10 +395,38 @@ def avaliar_saf(solicitacao_id):
             if centro_info.get('ativo') is False:
                 return jsonify({'erro': 'Centro de Trabalho inativo.'}), 400
 
-        supabase.table('saf_solicitacoes') \
-            .update(update_data) \
-            .eq('id', solicitacao_id) \
-            .execute()
+        try:
+            supabase.table('saf_solicitacoes') \
+                .update(update_data) \
+                .eq('id', solicitacao_id) \
+                .execute()
+        except Exception as update_err:
+            err_txt = str(update_err)
+            fk_sintoma = (
+                'saf_solicitacoes_sintoma_id_fkey' in err_txt
+                or (
+                    'violates foreign key constraint' in err_txt
+                    and 'sintoma_id' in err_txt
+                    and 'sintomas_catalogo' in err_txt
+                )
+            )
+            if fk_sintoma and sintoma_id_para_gravar:
+                logger.warning(
+                    '[AVALIAR_SAF][%s] FK de sintoma detectada; sincronizando espelho tecnico no catalogo. solicitacao_id=%s sintoma_id=%s',
+                    request_id,
+                    solicitacao_id,
+                    sintoma_id_para_gravar,
+                )
+                espelhou = _espelhar_sintoma_legacy_no_catalogo(supabase, sintoma_id_para_gravar)
+                if espelhou:
+                    supabase.table('saf_solicitacoes') \
+                        .update(update_data) \
+                        .eq('id', solicitacao_id) \
+                        .execute()
+                else:
+                    raise
+            else:
+                raise
 
         qmnum    = None
         erro_sap = None
@@ -327,7 +478,7 @@ def avaliar_saf(solicitacao_id):
                         'observacao': 'Integracao automatica SAP desativada no backend.',
                         'centro_trabalho': centro_trabalho,
                         'centro_trabalho_denominacao': (centro_info or {}).get('denominacao'),
-                        'sintoma_id': sintoma_id_resolvido,
+                        'sintoma_id': sintoma_id_para_gravar,
                         'sintoma_id_original': sintoma_id_original,
                         'texto_breve_nota': texto_breve_nota,
                         'texto_longo_nota': texto_longo_nota,
@@ -351,6 +502,8 @@ def avaliar_saf(solicitacao_id):
                 'tipo_nota': tipo_nota,
                 'centro_trabalho': centro_trabalho,
                 'centro_trabalho_denominacao': (centro_info or {}).get('denominacao'),
+                'sintoma_id': sintoma_id_para_gravar,
+                'sintoma_id_original': sintoma_id_original,
             }
             if erro_sap:
                 resposta['aviso_sap'] = (

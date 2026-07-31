@@ -42,6 +42,9 @@ class CriarSafPayload(BaseModel):
     via_numero: str | None = Field(default=None, max_length=3)
     km_inicial: str | None = Field(default=None, max_length=5)
     km_final: str | None = Field(default=None, max_length=5)
+    linha_servico: str | None = Field(default=None, max_length=10)
+    prefixo: str | None = Field(default=None, max_length=30)
+    numero_ocorrencia: str | None = Field(default=None, max_length=50)
     notificador_nome: str | None = Field(default=None, max_length=120)
     notificador_area: str | None = Field(default=None, max_length=120)
     foto_base64: str | None = None
@@ -65,6 +68,9 @@ class AtualizarSafPayload(BaseModel):
     via_numero: str | None = Field(default=None, max_length=3)
     km_inicial: str | None = Field(default=None, max_length=5)
     km_final: str | None = Field(default=None, max_length=5)
+    linha_servico: str | None = Field(default=None, max_length=10)
+    prefixo: str | None = Field(default=None, max_length=30)
+    numero_ocorrencia: str | None = Field(default=None, max_length=50)
 
 
 class CancelarSafPayload(BaseModel):
@@ -135,7 +141,7 @@ def listar_minhas_safs(usuario_id):
         result = (
             supabase.table("saf_solicitacoes")
             .select(
-                "id, ticket_saf, titulo_falha, descricao_longa, prioridade, anexo_evidencia_url, criado_em, "
+                "id, ticket_saf, titulo_falha, descricao_longa, numero_ocorrencia, prioridade, anexo_evidencia_url, criado_em, "
                 "status, motivo_devolucao, data_avaliacao, tipo_nota, qmnum_duplicata, "
                 "saf_integracao_sap(qmnum, aufnr, numero_ordem_sap, tipo_nota, status_integracao)"
             )
@@ -166,7 +172,7 @@ def listar_notificacoes_sic():
         result = (
             supabase.table("saf_solicitacoes")
             .select(
-                "id, ticket_saf, titulo_falha, descricao_longa, prioridade, criado_em, "
+                "id, ticket_saf, titulo_falha, descricao_longa, numero_ocorrencia, prioridade, criado_em, "
                 "status, local_instalacao, equipamento, notificador_nome, notificador_area, "
                 "saf_integracao_sap(qmnum, aufnr, numero_ordem_sap, tipo_nota, status_integracao)"
             )
@@ -196,7 +202,7 @@ def buscar_saf(saf_id: str):
         resp = (
             supabase.table('saf_solicitacoes')
             .select(
-                'id, ticket_saf, titulo_falha, descricao_longa, prioridade, criado_em, '
+                'id, ticket_saf, titulo_falha, descricao_longa, linha_servico, prefixo, numero_ocorrencia, prioridade, criado_em, '
                 'status, motivo_devolucao, motivo_cancelamento, data_avaliacao, '
                 'local_instalacao, local_instalacao_id, equipamento, equipamento_id, '
                 'sistema_id, subsistema_id, sintoma_id, data_inicio_avaria, hora_inicio_avaria, '
@@ -324,6 +330,18 @@ def atualizar_saf(saf_id: str):
                         sintoma_raw,
                     )
                     campos['sintoma_id'] = atual.get('sintoma_id')
+
+        if 'numero_ocorrencia' in campos:
+            numero_ocorrencia = str(campos.get('numero_ocorrencia') or '').strip()
+            campos['numero_ocorrencia'] = numero_ocorrencia or None
+
+        if 'linha_servico' in campos:
+            linha_servico = str(campos.get('linha_servico') or '').strip()
+            campos['linha_servico'] = linha_servico or None
+
+        if 'prefixo' in campos:
+            prefixo = str(campos.get('prefixo') or '').strip()
+            campos['prefixo'] = prefixo or None
 
         campos['status'] = 'ABERTA'
         campos['motivo_devolucao'] = None
@@ -537,6 +555,9 @@ def criar_saf():
             "via_numero":          dados.get("via_numero"),
             "km_inicial":          dados.get("km_inicial"),
             "km_final":            dados.get("km_final"),
+            "linha_servico":       dados.get("linha_servico"),
+            "prefixo":             dados.get("prefixo"),
+            "numero_ocorrencia":  dados.get("numero_ocorrencia"),
             "data_inicio_avaria":  dados.get("data_inicio_avaria"),
             "hora_inicio_avaria":  dados.get("hora_inicio_avaria"),
         }
@@ -602,6 +623,42 @@ def criar_saf():
                         tentativa + 1,
                     )
                     insert_payload.pop("subsistema_id", None)
+                    handled = True
+
+                if (
+                    ("Could not find the 'numero_ocorrencia' column" in err_txt)
+                    or ("numero_ocorrencia" in err_txt and "schema cache" in err_txt)
+                ) and "numero_ocorrencia" in insert_payload:
+                    current_app.logger.warning(
+                        "[CRIAR_SAF][%s] tentativa=%s coluna numero_ocorrencia ausente; retry sem numero_ocorrencia",
+                        request_id,
+                        tentativa + 1,
+                    )
+                    insert_payload.pop("numero_ocorrencia", None)
+                    handled = True
+
+                if (
+                    ("Could not find the 'linha_servico' column" in err_txt)
+                    or ("linha_servico" in err_txt and "schema cache" in err_txt)
+                ) and "linha_servico" in insert_payload:
+                    current_app.logger.warning(
+                        "[CRIAR_SAF][%s] tentativa=%s coluna linha_servico ausente; retry sem linha_servico",
+                        request_id,
+                        tentativa + 1,
+                    )
+                    insert_payload.pop("linha_servico", None)
+                    handled = True
+
+                if (
+                    ("Could not find the 'prefixo' column" in err_txt)
+                    or ("prefixo" in err_txt and "schema cache" in err_txt)
+                ) and "prefixo" in insert_payload:
+                    current_app.logger.warning(
+                        "[CRIAR_SAF][%s] tentativa=%s coluna prefixo ausente; retry sem prefixo",
+                        request_id,
+                        tentativa + 1,
+                    )
+                    insert_payload.pop("prefixo", None)
                     handled = True
 
                 # Banco atual referencia saf_solicitacoes.sintoma_id -> sintomas_catalogo(id).

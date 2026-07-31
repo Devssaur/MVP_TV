@@ -30,9 +30,13 @@
     <input type="hidden" id="via_numero" name="via_numero">
     <input type="hidden" id="km_inicial" name="km_inicial">
     <input type="hidden" id="km_final" name="km_final">
+    <input type="hidden" id="linha_servico" name="linha_servico">
+    <input type="hidden" id="prefixo" name="prefixo">
     <input type="hidden" id="foto_lat" name="foto_lat">
     <input type="hidden" id="foto_lng" name="foto_lng">
     <input type="hidden" id="foto_acc" name="foto_acc">
+    <input type="hidden" id="numero_ocorrencia" name="numero_ocorrencia">
+    <input type="hidden" id="equipamento_operacional" name="equipamento_operacional">
 
     <div class="form-section">
       <div class="form-section-title">
@@ -91,6 +95,19 @@
               <option value="BAIXA">4 - ATENDIMENTO PROGRAM&Aacute;VEL (PCM)</option>
             </select>
           </div>
+          <div class="form-group" id="fluxo-linha-servico-wrap" style="display:none;">
+            <label class="form-label clean-label" for="fluxo-linha-servico">Linha de serviço</label>
+            <select id="fluxo-linha-servico" class="form-control compact-select">
+              <option value=""></option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13">13</option>
+            </select>
+          </div>
+          <div class="form-group" id="fluxo-prefixo-wrap" style="display:none;">
+            <label class="form-label clean-label" for="fluxo-prefixo">Prefixo</label>
+            <input id="fluxo-prefixo" type="text" class="form-control" placeholder="Ex: PRF-001" maxlength="30">
+          </div>
         </div>
         <div id="estacao-row-falha" class="flux-grid est-row"></div>
         <div id="estacao-row-3" class="flux-grid est-row">
@@ -101,7 +118,6 @@
               <option value="11">11</option>
               <option value="12">12</option>
               <option value="13">13</option>
-              <option value="36">36</option>
             </select>
           </div>
           <div class="form-group" id="top-estacao-wrap" style="display:block;">
@@ -174,6 +190,24 @@
         </div>
       </div>
 
+      <div class="flux-grid est-row ocorrencia-operacao-row" style="margin-top:.35rem;">
+        <div class="form-group equipamento-operacional-wrap" id="equipamento-operacional-wrap">
+          <label class="form-label" for="equipamento_operacional_check">
+            Equipamento operacional? <span class="required">*</span>
+          </label>
+          <label class="equipamento-operacional-toggle is-neutral" id="equipamento-operacional-toggle" for="equipamento_operacional_check">
+            <input id="equipamento_operacional_check" type="checkbox">
+            <span class="equipamento-operacional-indicator" aria-hidden="true"></span>
+            <span class="equipamento-operacional-text" id="equipamento-operacional-text">Selecione</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="numero_ocorrencia_input">N° da ocorrência</label>
+          <input id="numero_ocorrencia_input" type="text" class="form-control" placeholder="Ex: 123456" maxlength="50">
+          <small class="form-hint"></small>
+        </div>
+      </div>
+
       <div class="form-group">
         <label class="form-label" for="descricao_falha">Descri&ccedil;&atilde;o da falha <span class="required">*</span></label>
         <textarea id="descricao_falha" name="descricao_falha" class="form-control" rows="4" placeholder="Descreva de forma objetiva o que ocorreu"></textarea>
@@ -187,14 +221,14 @@
     <div class="form-section wizard-form-extra wizard-oculto">
       <div class="form-section-title">
         <span class="section-num">2</span> Foto do Problema
-        <span class="required" style="font-size:.75rem;font-weight:700;">*</span>
+        <span id="foto-required" class="required" style="font-size:.75rem;font-weight:700;display:none;">*</span>
       </div>
 
       <div id="cam-no-photo">
         <div style="text-align:center;padding:2rem 1.25rem;border:2px dashed var(--border);border-radius:var(--radius-lg);background:var(--surface);">
           <div style="font-size:3rem;margin-bottom:.75rem;opacity:.6;">&#128247;</div>
           <p style="font-size:.9rem;color:var(--text);font-weight:600;margin-bottom:.3rem;">Foto do equipamento ou local com a falha</p>
-          <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1.25rem;">A foto &eacute; obrigat&oacute;ria. A localiza&ccedil;&atilde;o GPS ser&aacute; registrada automaticamente.</p>
+          <p id="foto-help-text" style="font-size:.82rem;color:var(--text-muted);margin-bottom:1.25rem;">A foto &eacute; obrigat&oacute;ria apenas para o fluxo de Estações. A localiza&ccedil;&atilde;o GPS ser&aacute; registrada automaticamente.</p>
           <button type="button" id="btn-open-camera" class="btn btn-primary btn-lg">&#128247;&nbsp; Abrir C&acirc;mera</button>
         </div>
       </div>
@@ -248,6 +282,12 @@
 </div>
 
 <style>
+  .nova-saf-clean {
+    overflow-y: auto;
+    max-height: calc(100dvh - 120px);
+    padding-right: .25rem;
+  }
+
   .nova-saf-clean .tipo-tabs {
     display: flex;
     flex-wrap: wrap;
@@ -360,7 +400,7 @@
   }
 
   .nova-saf-clean .flux-grid.flux-grid-mro {
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .nova-saf-clean .flux-grid.flux-grid-via {
@@ -369,6 +409,81 @@
 
   .nova-saf-clean .via-input {
     font-size: clamp(.86rem, 2.2vw, .95rem);
+  }
+
+  .nova-saf-clean .ocorrencia-operacao-row {
+    grid-template-columns: minmax(280px, 1.2fr) minmax(220px, 1fr);
+    align-items: end;
+  }
+
+  .nova-saf-clean .equipamento-operacional-wrap {
+    margin-bottom: 0;
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: .55rem .75rem;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+    user-select: none;
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: #059669;
+    cursor: pointer;
+  }
+
+  .nova-saf-clean .equipamento-operacional-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #9ca3af;
+    flex: 0 0 auto;
+  }
+
+  .nova-saf-clean .equipamento-operacional-text {
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle.is-operacional {
+    border-color: #16a34a;
+    background: rgba(22, 163, 74, .08);
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle.is-operacional .equipamento-operacional-indicator {
+    background: #16a34a;
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle.is-operacional .equipamento-operacional-text {
+    color: #166534;
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle.is-nao-operacional {
+    border-color: #dc2626;
+    background: rgba(220, 38, 38, .08);
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle.is-nao-operacional .equipamento-operacional-indicator {
+    background: #dc2626;
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle.is-nao-operacional .equipamento-operacional-text {
+    color: #991b1b;
+  }
+
+  .nova-saf-clean .equipamento-operacional-toggle.is-neutral {
+    border-color: var(--border);
+    background: var(--surface);
   }
 
   .nova-saf-clean .compact-select {
@@ -452,6 +567,11 @@
       gap: .75rem;
     }
 
+    .nova-saf-clean .ocorrencia-operacao-row {
+      grid-template-columns: 1fr 1fr;
+      gap: .65rem;
+    }
+
     .nova-saf-clean .flux-grid-top.top-estacao-on,
     .nova-saf-clean .flux-grid-top.top-estacao-on {
       grid-template-columns: 1fr;
@@ -497,6 +617,21 @@
       gap: .5rem;
     }
 
+    .nova-saf-clean .flux-grid.flux-grid-mro {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+  }
+
+  @media (max-width: 700px) {
+    .nova-saf-clean .ocorrencia-operacao-row {
+      grid-template-columns: 1fr;
+    }
+
+    .nova-saf-clean .flux-grid.flux-grid-mro {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .75rem;
+    }
   }
 
   /* ── Wizard de 2 passos ── */
@@ -556,8 +691,12 @@ document.addEventListener('DOMContentLoaded', async function () {
   const btnSubmit = document.getElementById('btn-submit');
   const linhaSel = document.getElementById('fluxo-linha');
   const prioSel = document.getElementById('fluxo-prioridade');
+  const linhaServicoSel = document.getElementById('fluxo-linha-servico');
+  const prefixoInput = document.getElementById('fluxo-prefixo');
   const linhaWrap = document.getElementById('fluxo-linha-wrap');
   const prioridadeWrap = document.getElementById('fluxo-prioridade-wrap');
+  const linhaServicoWrap = document.getElementById('fluxo-linha-servico-wrap');
+  const prefixoWrap = document.getElementById('fluxo-prefixo-wrap');
   const sistemaWrap = document.getElementById('fluxo-sistema-wrap');
   const prioSistemaGrid = document.getElementById('flux-grid-prio-sistema');
   const subsFalhaGrid = document.getElementById('flux-grid-subs-falha');
@@ -601,6 +740,9 @@ document.addEventListener('DOMContentLoaded', async function () {
   const viaKmGridOriginal = viaKmGrid;
   const descricaoInput = document.getElementById('descricao_falha');
   const equipamentoCurtoInput = document.getElementById('equipamento_curto');
+  const equipamentoOperacionalCheck = document.getElementById('equipamento_operacional_check');
+  const equipamentoOperacionalToggle = document.getElementById('equipamento-operacional-toggle');
+  const equipamentoOperacionalText = document.getElementById('equipamento-operacional-text');
   const avariaLegenda = document.getElementById('avaria-legenda');
 
   const sistemaIdHidden = document.getElementById('sistema_id');
@@ -611,8 +753,11 @@ document.addEventListener('DOMContentLoaded', async function () {
   const viaNumeroHidden = document.getElementById('via_numero');
   const kmInicialHidden = document.getElementById('km_inicial');
   const kmFinalHidden = document.getElementById('km_final');
+  const linhaServicoHidden = document.getElementById('linha_servico');
+  const prefixoHidden = document.getElementById('prefixo');
   const localInstalacaoIdHidden = document.getElementById('local_instalacao_id');
   const localInstalacaoNomeHidden = document.getElementById('local_instalacao_nome');
+  const equipamentoOperacionalHidden = document.getElementById('equipamento_operacional');
 
   const searchableSelects = [linhaSel, sistemaSel, subsistemaSel, falhaSel, trechoSel, estacaoSel, serieSel, tremSel, carroSel, equipamentoAmvSel];
 
@@ -628,6 +773,31 @@ document.addEventListener('DOMContentLoaded', async function () {
   window._capturedPhoto = null;
   let safEdicaoOriginal = null;
   const searchableUiMap = new Map();
+  let equipamentoOperacionalSelecionado = false;
+
+  function applyEstadoOperacionalUI() {
+    if (!equipamentoOperacionalToggle || !equipamentoOperacionalText || !equipamentoOperacionalCheck) return;
+
+    equipamentoOperacionalToggle.classList.remove('is-neutral', 'is-operacional', 'is-nao-operacional');
+
+    if (!equipamentoOperacionalSelecionado) {
+      equipamentoOperacionalToggle.classList.add('is-neutral');
+      equipamentoOperacionalText.textContent = 'Selecione';
+      equipamentoOperacionalHidden.value = '';
+      return;
+    }
+
+    if (equipamentoOperacionalCheck.checked) {
+      equipamentoOperacionalToggle.classList.add('is-operacional');
+      equipamentoOperacionalText.textContent = 'Operacional';
+      equipamentoOperacionalHidden.value = 'SIM';
+      return;
+    }
+
+    equipamentoOperacionalToggle.classList.add('is-nao-operacional');
+    equipamentoOperacionalText.textContent = 'Nao operacional';
+    equipamentoOperacionalHidden.value = 'NAO';
+  }
 
   function escHtml(value) {
     return String(value || '')
@@ -907,6 +1077,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     carroSel.value = '';
     equipamentoCurtoInput.value = '';
     equipamentoAmvSel.value = '';
+    equipamentoOperacionalCheck.checked = false;
+    equipamentoOperacionalSelecionado = false;
+    applyEstadoOperacionalUI();
     descricaoInput.value = '';
     resetViaCampos();
 
@@ -936,7 +1109,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   async function carregarSeriesMro() {
     resetMroTrens();
-    const res = await API.opcoesFormulario({ tipo: 'serie', linha: '36' });
+    const res = await API.opcoesFormulario({ tipo: 'serie' });
     if (!res.ok || !res.data.opcoes?.length) {
       return;
     }
@@ -957,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const serie = (serieSel.value || '').trim();
     if (!serie) return;
 
-    const res = await API.opcoesFormulario({ tipo: 'trem', serie, linha: '36' });
+    const res = await API.opcoesFormulario({ tipo: 'trem', serie });
     if (!res.ok || !res.data.opcoes?.length) {
       return;
     }
@@ -976,7 +1149,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const trem = (tremSel.value || '').trim();
     if (!serie || !trem) return;
 
-    const res = await API.opcoesFormulario({ tipo: 'carro', serie, trem, linha: '36' });
+    const res = await API.opcoesFormulario({ tipo: 'carro', serie, trem });
     if (!res.ok || !res.data.opcoes?.length) {
       return;
     }
@@ -1302,23 +1475,40 @@ document.addEventListener('DOMContentLoaded', async function () {
     applyEstacaoSistemaCustomLayout();
 
     if (isMro) {
+      if (prefixoWrap && prefixoWrap.parentElement !== mroTrensGrid) {
+        mroTrensGrid.insertBefore(prefixoWrap, mroTrensGrid.firstChild);
+      }
+      if (prefixoWrap) prefixoWrap.style.display = 'block';
       if (prioridadeWrap && prioridadeWrap.parentElement !== topGrid) {
         topGrid.appendChild(prioridadeWrap);
       }
-      linhaSel.innerHTML = '<option value="36">Linha 36 - Trivia Trens</option>';
-      linhaSel.value = '36';
-      linhaSel.disabled = true;
+        if (linhaServicoWrap && linhaServicoWrap.parentElement !== topGrid) {
+          topGrid.appendChild(linhaServicoWrap);
+        }
+        if (linhaServicoWrap) linhaServicoWrap.style.display = 'block';
+      linhaSel.innerHTML = linhaOptionsPadrao;
+      linhaSel.value = '';
+      linhaSel.disabled = false;
       trechoSel.value = '';
       document.getElementById('equipamento_nome').value = '';
       equipamentoCurtoInput.value = '';
       sistemaSel.value = '1';
-      sistemaSel.disabled = true;
+      sistemaSel.disabled = false;
       sistemaIdHidden.value = '1';
-      localInstalacaoIdHidden.value = '36';
-      localInstalacaoNomeHidden.value = 'Linha 36 - Trivia Trens';
+      localInstalacaoIdHidden.value = '';
+      localInstalacaoNomeHidden.value = '';
       refreshSearchableSelect(linhaSel);
       refreshSearchableSelect(sistemaSel);
     } else {
+      if (linhaServicoWrap) linhaServicoWrap.style.display = 'none';
+      if (prefixoWrap) prefixoWrap.style.display = 'none';
+      if (prefixoWrap && prefixoWrap.parentElement !== estacaoRow2) {
+        estacaoRow2.appendChild(prefixoWrap);
+      }
+      if (linhaServicoSel) linhaServicoSel.value = '';
+      if (prefixoInput) prefixoInput.value = '';
+      linhaServicoHidden.value = '';
+      prefixoHidden.value = '';
       if (!isEstacaoCustom && prioridadeWrap && prioridadeGrid && prioridadeWrap.parentElement !== prioridadeGrid) {
         if (sistemaWrap && sistemaWrap.parentElement === prioridadeGrid) {
           prioridadeGrid.insertBefore(prioridadeWrap, sistemaWrap);
@@ -1408,6 +1598,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     kmInicialRequiredEl.style.display = viaObrigatoria ? 'inline' : 'none';
     kmFinalRequiredEl.style.display = viaObrigatoria ? 'inline' : 'none';
     const estacaoObrigatoria = tipoSelecionado === 'ESTACAO';
+    const fotoObrigatoria = isEstacao;
     const tremDataCompleta = !isMro || (
       !!(serieSel.value || '').trim() &&
       !!(tremSel.value || '').trim() &&
@@ -1416,6 +1607,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const equipamentoEstacaoPreenchido =
       !!(equipamentoCurtoInput.value || '').trim() ||
       !!(equipamentoAmvSel.value || '').trim();
+    const equipamentoOperacionalValido = !isEstacao || equipamentoOperacionalSelecionado;
 
     let formValido =
       !!(linhaSel.value || '').trim() &&
@@ -1429,8 +1621,8 @@ document.addEventListener('DOMContentLoaded', async function () {
       (!viaObrigatoria || isKmCompleto(kmFinalInput.value)) &&
       tremDataCompleta &&
       (!estacaoObrigatoria || !!(estacaoSel.value || '').trim()) &&
-      descricao.length >= 3 &&
-      (isEditMode ? true : !!window._capturedPhoto);
+      equipamentoOperacionalValido &&
+      descricao.length >= 3;
 
     if (isEstacao) {
       // Requisito do fluxo ESTACAO: somente campos da tela + foto sao obrigatorios.
@@ -1440,11 +1632,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         !!(prioSel.value || '').trim() &&
         !!(linhaSel.value || '').trim() &&
         !!(estacaoSel.value || '').trim() &&
+        equipamentoOperacionalValido &&
         equipamentoEstacaoPreenchido &&
         descricao.length >= 3 &&
         (isEditMode ? true : !!window._capturedPhoto);
     }
 
+    document.getElementById('foto-required').style.display = fotoObrigatoria ? 'inline' : 'none';
+    document.getElementById('foto-help-text').textContent = fotoObrigatoria
+      ? 'A foto é obrigatória para o fluxo de Estações. A localização GPS será registrada automaticamente.'
+      : 'A foto é opcional para este fluxo. A localização GPS será registrada automaticamente.';
     document.getElementById('desc-error').style.display = descricao.length === 0 || descricao.length >= 3 ? 'none' : 'block';
     btnSubmit.disabled = !formValido;
   }
@@ -1603,6 +1800,20 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     descricaoInput.value = String(camposDescricao.get('DESCRICAO') || '').trim();
+    linhaServicoSel.value = String(saf.linha_servico || camposDescricao.get('LINHA DE SERVICO') || '').trim();
+    linhaServicoHidden.value = linhaServicoSel.value;
+    prefixoInput.value = String(saf.prefixo || camposDescricao.get('PREFIXO') || '').trim();
+    prefixoHidden.value = prefixoInput.value;
+    document.getElementById('numero_ocorrencia_input').value = String(
+      saf.numero_ocorrencia || camposDescricao.get('NUMERO DA OCORRENCIA') || ''
+    ).trim();
+    document.getElementById('numero_ocorrencia').value = document.getElementById('numero_ocorrencia_input').value;
+    const opTexto = normalizeText(camposDescricao.get('EQUIPAMENTO OPERACIONAL') || '');
+    if (opTexto) {
+      equipamentoOperacionalSelecionado = true;
+      equipamentoOperacionalCheck.checked = opTexto === 'SIM' || opTexto === 'OPERACIONAL';
+      applyEstadoOperacionalUI();
+    }
     equipamentoCurtoInput.value = String(saf.equipamento || camposDescricao.get('EQUIPAMENTO') || '').trim();
     document.getElementById('equipamento_nome').value = equipamentoCurtoInput.value;
     document.getElementById('equipamento_id').value = String(saf.equipamento_id || '').trim();
@@ -1759,6 +1970,16 @@ document.addEventListener('DOMContentLoaded', async function () {
     checkFormValid();
   });
 
+  linhaServicoSel.addEventListener('change', function () {
+    linhaServicoHidden.value = (this.value || '').trim();
+    checkFormValid();
+  });
+
+  prefixoInput.addEventListener('input', function () {
+    prefixoHidden.value = (this.value || '').trim();
+    checkFormValid();
+  });
+
   subsistemaSel.addEventListener('change', async function () {
     const subsistemaId = (this.value || '').trim();
     subsistemaIdHidden.value = subsistemaId;
@@ -1802,6 +2023,14 @@ document.addEventListener('DOMContentLoaded', async function () {
   });
 
   descricaoInput.addEventListener('input', checkFormValid);
+  document.getElementById('numero_ocorrencia_input').addEventListener('input', function () {
+    document.getElementById('numero_ocorrencia').value = (this.value || '').trim();
+  });
+  equipamentoOperacionalCheck.addEventListener('change', function () {
+    equipamentoOperacionalSelecionado = true;
+    applyEstadoOperacionalUI();
+    checkFormValid();
+  });
   equipamentoCurtoInput.addEventListener('input', function () {
     document.getElementById('equipamento_nome').value = this.value.trim();
     checkFormValid();
@@ -1862,8 +2091,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     const viaNumero = normalizeVia(viaInput.value);
     const kmInicial = (kmInicialInput.value || '').trim();
     const kmFinal = (kmFinalInput.value || '').trim();
+    const linhaServico = (linhaServicoSel.value || '').trim();
+    const prefixo = (prefixoInput.value || '').trim();
     const descricao = (descricaoInput.value || '').trim();
     const equipamentoCurto = (equipamentoCurtoInput.value || '').trim();
+    const numeroOcorrencia = (document.getElementById('numero_ocorrencia_input').value || '').trim();
+    const equipamentoOperacionalTexto = equipamentoOperacionalCheck.checked ? 'Sim' : 'Nao';
     const equipamentoAmv = (equipamentoAmvSel.options[equipamentoAmvSel.selectedIndex]?.textContent || '').trim();
 
     const descricaoLonga = [
@@ -1876,6 +2109,10 @@ document.addEventListener('DOMContentLoaded', async function () {
       kmInicial ? `KM Inicial: ${kmInicial}` : '',
       kmFinal ? `KM Final: ${kmFinal}` : '',
       `Estacao: ${estacaoNome}`,
+      (tipoSelecionado === 'MRO' && linhaServico) ? `Linha de Servico: ${linhaServico}` : '',
+      (tipoSelecionado === 'MRO' && prefixo) ? `Prefixo: ${prefixo}` : '',
+      numeroOcorrencia ? `Numero da Ocorrencia: ${numeroOcorrencia}` : '',
+      (tipoSelecionado === 'ESTACAO' && equipamentoOperacionalSelecionado) ? `Equipamento operacional: ${equipamentoOperacionalTexto}` : '',
       serieMro ? `Serie: ${serieMro}` : '',
       tremMro ? `Trem: ${tremMro}` : '',
       carroMro ? `Carro: ${carroMro}` : '',
@@ -1916,8 +2153,11 @@ document.addEventListener('DOMContentLoaded', async function () {
       via_numero: viaNumero || null,
       km_inicial: kmInicial || null,
       km_final: kmFinal || null,
+      linha_servico: (tipoSelecionado === 'MRO' && linhaServico) ? linhaServico : null,
+      prefixo: (tipoSelecionado === 'MRO' && prefixo) ? prefixo : null,
       data_inicio_avaria: dataInicioHidden.value,
       hora_inicio_avaria: horaInicioHidden.value,
+      numero_ocorrencia: numeroOcorrencia || null,
       foto_base64: window._capturedPhoto?.dataUrl || null,
       foto_lat: document.getElementById('foto_lat').value || null,
       foto_lng: document.getElementById('foto_lng').value || null,
@@ -1935,6 +2175,9 @@ document.addEventListener('DOMContentLoaded', async function () {
       subsistema_id: payload.subsistema_id || String(safEdicaoOriginal?.subsistema_id || '').trim() || null,
       sintoma_id: payload.sintoma_id || safEdicaoOriginal?.sintoma_id || null,
       prioridade: payload.prioridade || safEdicaoOriginal?.prioridade || 'ALTA',
+      numero_ocorrencia: payload.numero_ocorrencia,
+      linha_servico: payload.linha_servico,
+      prefixo: payload.prefixo,
       via_numero: payload.via_numero,
       km_inicial: payload.km_inicial,
       km_final: payload.km_final,

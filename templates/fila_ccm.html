@@ -52,9 +52,23 @@
       <input id="order-number-filter" class="equip-filter-select" type="search" placeholder="Ex: 4101234567">
     </div>
 
+    <div class="ccm-filter-item" id="approved-occurrence-filter-wrap" style="display:none;">
+      <label class="equip-filter-label" for="approved-occurrence-filter">N° da ocorrência</label>
+      <input id="approved-occurrence-filter" class="equip-filter-select" type="search" placeholder="Ex: 123456">
+    </div>
+
     <div class="ccm-filter-item">
       <label class="equip-filter-label" for="date-range-filter">Periodo</label>
       <input id="date-range-filter" class="equip-filter-select ccm-date-range-input" type="text" placeholder="Selecione o intervalo de datas" readonly>
+    </div>
+
+    <div class="ccm-filter-item">
+      <label class="equip-filter-label" for="sort-order-filter">Ordenar</label>
+      <select id="sort-order-filter" class="equip-filter-select">
+        <option value="mais_novos" selected>Mais novos</option>
+        <option value="mais_antigos">Mais antigos</option>
+        <option value="criticidade">Criticidade</option>
+      </select>
     </div>
 
     <button class="btn btn-ghost btn-sm" id="btn-clear-ccm-filters" type="button">Limpar filtros</button>
@@ -86,9 +100,22 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" for="aceite-sintoma">Sintoma da falha</label>
-          <select id="aceite-sintoma" class="form-control"></select>
+        <div class="ccm-aceite-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="aceite-sintoma">Sintoma da falha</label>
+            <select id="aceite-sintoma" class="form-control"></select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="aceite-prioridade">Prioridade SAP (CCM)</label>
+            <select id="aceite-prioridade" class="form-control">
+              <option value="">Selecione a prioridade</option>
+              <option value="1">1 - Muito elevado</option>
+              <option value="2">2 - Elevado</option>
+              <option value="3">3 - Medio</option>
+              <option value="4">4 - Baixo</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-group">
@@ -398,8 +425,8 @@
   background: var(--surface);
 }
 .ccm-criticidade.is-locked {
-  opacity: .58;
-  filter: grayscale(.25);
+  opacity: 1;
+  filter: none;
   background: #f3f4f6;
 }
 .ccm-criticidade-title {
@@ -420,9 +447,9 @@
   font-size: .76rem;
   color: var(--text);
 }
-.ccm-criticidade-option input {
-  margin: 0;
-  accent-color: var(--primary);
+.ccm-criticidade-option.is-selected {
+  font-weight: 700;
+  color: var(--primary);
 }
 .ccm-motivo-box {
   font-size: .8rem;
@@ -716,8 +743,10 @@
   let activeLine   = '';
   let activeStation = '';
   let activeOrderSearch = '';
+  let activeOccurrenceSearchApproved = '';
   let activeDateFrom = '';
   let activeDateTo = '';
+  let activeSortOrder = 'mais_novos';
   let estacoesCache = [];
   let estacaoById = new Map();
   let estacoesPorLinha = new Map();
@@ -824,13 +853,27 @@
     return String(item.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
   }
 
+  function parseOccurrenceNumber(item) {
+    const direto = String(item?.numero_ocorrencia || '').trim();
+    if (direto) return direto;
+    const descricao = String(item?.descricao_longa || '');
+    const m = descricao.match(/(?:^|\n)Numero da Ocorrencia:\s*([^\n\r]*)/i);
+    return m && m[1] ? String(m[1]).trim() : '';
+  }
+
+  function formatSafTicket(item) {
+    const raw = String(item?.ticket_saf || '').trim();
+    if (raw) return `#${raw.padStart(6, '0')}`;
+    const fallback = String(item?.id || '').trim().slice(0, 6).toUpperCase();
+    return fallback ? `#${fallback}` : '#000000';
+  }
+
   function parseOrderGroupMeta(item) {
     const ordem = parseOrderNumber(item);
     if (ordem) {
       return { key: `ordem:${ordem}`, title: ordem };
     }
-    const equip = String(item.equipamento || item.titulo_falha || 'Sem equipamento').trim();
-    return { key: `sem-ordem:${equip}`, title: 'SEM ORDEM' };
+    return { key: `saf:${String(item.id || '').trim()}`, title: formatSafTicket(item) };
   }
 
   function parseClassicGroupMeta(item) {
@@ -886,15 +929,51 @@
     return local;
   }
 
+  function parseCriticidadeLevel(item) {
+    const p = String(item?.prioridade || '').trim().toUpperCase();
+    if (p === 'CRITICA' || p === 'CRÍTICA' || p === '1') return 1;
+    if (p === 'ALTA' || p === '2') return 2;
+    if (p === 'MEDIA' || p === 'MÉDIA' || p === '3') return 3;
+    if (p === 'BAIXA' || p === '4') return 4;
+    return 99;
+  }
+
+  function parseSortTimestamp(item) {
+    const raw = item?.criado_em || item?.data_avaliacao || '';
+    const t = raw ? new Date(raw).getTime() : NaN;
+    return Number.isNaN(t) ? 0 : t;
+  }
+
+  function ordenarItensFila(items) {
+    const lista = [...(items || [])];
+
+    if (activeSortOrder === 'criticidade') {
+      return lista.sort((a, b) => {
+        const ca = parseCriticidadeLevel(a);
+        const cb = parseCriticidadeLevel(b);
+        if (ca !== cb) return ca - cb;
+        return parseSortTimestamp(b) - parseSortTimestamp(a);
+      });
+    }
+
+    if (activeSortOrder === 'mais_antigos') {
+      return lista.sort((a, b) => parseSortTimestamp(a) - parseSortTimestamp(b));
+    }
+
+    return lista.sort((a, b) => parseSortTimestamp(b) - parseSortTimestamp(a));
+  }
+
   function enrichSafForFilters(item) {
     const linha = parseLinha(item);
     const estacao = parseEstacao(item);
     const dataNotificacao = toDateKey(item.criado_em);
+    const numeroOcorrencia = parseOccurrenceNumber(item);
     return {
       ...item,
       _linha: linha,
       _estacao: estacao,
       _data_notificacao: dataNotificacao,
+      _numero_ocorrencia: numeroOcorrencia,
     };
   }
 
@@ -955,6 +1034,10 @@
       const q = norm(activeOrderSearch);
       items = items.filter(s => norm(parseOrderNumber(s)).includes(q));
     }
+    if (activeFilter === 'APROVADA' && activeOccurrenceSearchApproved) {
+      const q = norm(activeOccurrenceSearchApproved);
+      items = items.filter(s => norm(s._numero_ocorrencia).includes(q));
+    }
     if (activeDateFrom) items = items.filter(s => {
       const d = String(s._data_notificacao || '');
       return d && d >= activeDateFrom;
@@ -1013,8 +1096,12 @@
 
   function syncFilterControls() {
     const orderSearchEl = document.getElementById('order-number-filter');
+    const approvedOccurrenceSearchEl = document.getElementById('approved-occurrence-filter');
     const dateRangeEl = document.getElementById('date-range-filter');
+    const sortOrderEl = document.getElementById('sort-order-filter');
     if (orderSearchEl) orderSearchEl.value = activeOrderSearch;
+    if (approvedOccurrenceSearchEl) approvedOccurrenceSearchEl.value = activeOccurrenceSearchApproved;
+    if (sortOrderEl) sortOrderEl.value = activeSortOrder;
     if (dateRangePicker) {
       const values = [];
       if (activeDateFrom) values.push(activeDateFrom);
@@ -1026,8 +1113,15 @@
         ? `${activeDateFrom} ate ${activeDateTo}`
         : '';
     }
+    syncApprovedOccurrenceFilterVisibility();
     populateLineFilter();
     populateStationFilter();
+  }
+
+  function syncApprovedOccurrenceFilterVisibility() {
+    const wrap = document.getElementById('approved-occurrence-filter-wrap');
+    if (!wrap) return;
+    wrap.style.display = activeFilter === 'APROVADA' ? 'flex' : 'none';
   }
 
   function initDateRangePicker() {
@@ -1107,7 +1201,7 @@
   // ───────── Render ─────────
   function renderQueue() {
     const container = document.getElementById('ccm-queue');
-    const items = getFiltered();
+    const items = ordenarItensFila(getFiltered());
 
     if (items.length === 0) {
       container.innerHTML = `
@@ -1119,22 +1213,29 @@
       return;
     }
 
-    const itensExpansiveis = items.filter(s => s.status === 'APROVADA' && parseOrderNumber(s));
-    const itensComuns = items.filter(s => !(s.status === 'APROVADA' && parseOrderNumber(s)));
+    const itensExpansiveis = items.filter(s => s.status === 'APROVADA');
+    const itensComuns = items.filter(s => s.status !== 'APROVADA');
     const blocos = [];
 
     if (itensComuns.length) {
       const classicGroups = new Map();
       itensComuns.forEach(item => {
-        const meta = parseClassicGroupMeta(item);
+        const meta = item.status === 'APROVADA'
+          ? parseOrderGroupMeta(item)
+          : parseClassicGroupMeta(item);
         if (!classicGroups.has(meta.key)) classicGroups.set(meta.key, { title: meta.title, items: [] });
         classicGroups.get(meta.key).items.push(item);
       });
       const sortedClassic = [...classicGroups.entries()].sort(([, a], [, b]) => {
-        const pa = a.items.filter(x => x.status === 'ABERTA').length;
-        const pb = b.items.filter(x => x.status === 'ABERTA').length;
-        if (pb !== pa) return pb - pa;
-        return a.title.localeCompare(b.title, 'pt-BR');
+        const ta = Math.max(...a.items.map(parseSortTimestamp));
+        const tb = Math.max(...b.items.map(parseSortTimestamp));
+        if (activeSortOrder === 'mais_antigos') return ta - tb;
+        if (activeSortOrder === 'criticidade') {
+          const ca = Math.min(...a.items.map(parseCriticidadeLevel));
+          const cb = Math.min(...b.items.map(parseCriticidadeLevel));
+          if (ca !== cb) return ca - cb;
+        }
+        return tb - ta;
       });
       blocos.push(...sortedClassic.map(([groupKey, groupData]) => renderClassicGroup(groupKey, groupData.title, groupData.items)));
     }
@@ -1146,7 +1247,17 @@
         if (!groups.has(meta.key)) groups.set(meta.key, { title: meta.title, items: [] });
         groups.get(meta.key).items.push(item);
       });
-      const sorted = [...groups.entries()].sort((a, b) => a[1].title.localeCompare(b[1].title, 'pt-BR', { numeric: true }));
+      const sorted = [...groups.entries()].sort(([, a], [, b]) => {
+        const ta = Math.max(...a.items.map(parseSortTimestamp));
+        const tb = Math.max(...b.items.map(parseSortTimestamp));
+        if (activeSortOrder === 'mais_antigos') return ta - tb;
+        if (activeSortOrder === 'criticidade') {
+          const ca = Math.min(...a.items.map(parseCriticidadeLevel));
+          const cb = Math.min(...b.items.map(parseCriticidadeLevel));
+          if (ca !== cb) return ca - cb;
+        }
+        return tb - ta;
+      });
       blocos.push(...sorted.map(([groupKey, groupData]) => renderGroup(groupKey, groupData.title, groupData.items)));
     }
 
@@ -1188,14 +1299,15 @@
     const selectedCount = items.filter(x => x.status === 'ABERTA' && getSelectionSet(groupKey).has(x.id)).length;
     const dupMode = duplicateModeGroups.has(groupKey);
     const isExpanded = expandedGroups.has(groupKey);
+    const hasGrouping = items.length > 1;
     const dtRef = items
       .map(i => i.data_avaliacao || i.criado_em)
       .filter(Boolean)
       .sort()
       .pop();
     const dtLabel = dtRef ? Fmt.datetime(dtRef) : 'Sem data';
-    const duplicadoBtn = pend > 0
-      ? `<button class="btn btn-warning btn-sm ccm-dup-header-btn ${dupMode ? 'active' : ''} js-dup-toggle" data-group="${encodeURIComponent(groupKey)}">Duplicado</button>`
+    const duplicadoBtn = hasGrouping && pend > 0
+      ? `<button class="btn btn-warning btn-sm ccm-dup-header-btn ${dupMode ? 'active' : ''} js-dup-toggle" data-group="${encodeURIComponent(groupKey)}">Possível duplicata</button>`
       : '';
     const confirmarSelecaoBtn = dupMode
       ? `<button class="btn btn-outline btn-sm ccm-dup-confirm-btn js-dup-confirm" data-group="${encodeURIComponent(groupKey)}" ${selectedCount === 0 ? 'disabled' : ''}>Confirmar seleção${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>`
@@ -1221,11 +1333,12 @@
     const pend = items.filter(x => x.status === 'ABERTA').length;
     const selectedCount = items.filter(x => x.status === 'ABERTA' && getSelectionSet(groupKey).has(x.id)).length;
     const dupMode = duplicateModeGroups.has(groupKey);
+    const hasGrouping = items.length > 1;
     const pendBadge = pend > 0
       ? `<span class="ccm-gcount pend">${pend} pendente${pend > 1 ? 's' : ''}</span>`
       : '';
-    const duplicadoBtn = pend > 0
-      ? `<button class="btn btn-warning btn-sm ccm-dup-header-btn ${dupMode ? 'active' : ''} js-dup-toggle" data-group="${encodeURIComponent(groupKey)}">Duplicado</button>`
+    const duplicadoBtn = hasGrouping && pend > 0
+      ? `<button class="btn btn-warning btn-sm ccm-dup-header-btn ${dupMode ? 'active' : ''} js-dup-toggle" data-group="${encodeURIComponent(groupKey)}">Possível duplicata</button>`
       : '';
     const confirmarSelecaoBtn = dupMode
       ? `<button class="btn btn-outline btn-sm ccm-dup-confirm-btn js-dup-confirm" data-group="${encodeURIComponent(groupKey)}" ${selectedCount === 0 ? 'disabled' : ''}>Confirmar seleção${selectedCount > 0 ? ` (${selectedCount})` : ''}</button>`
@@ -1270,19 +1383,39 @@
       ? `<div class="ccm-notificador"><span class="ccm-notif-nome">&#128221; ${escHtml(aprovadorNome || 'Aprovador não informado')}</span><span class="ccm-notif-area">Aprovador</span>${dataAvaliacao ? `<span class="ccm-notif-data">${escHtml(`Aprovado em ${dataAvaliacao}`)}</span>` : ''}</div>`
       : '';
     const prio = String(saf.prioridade || '').toUpperCase();
-    const criticidade = prio === 'BAIXA' || prio === '1' ? 1
-      : prio === 'MEDIA' || prio === 'MÉDIA' || prio === '2' ? 2
-      : prio === 'ALTA' || prio === '3' ? 3
-      : prio === 'CRITICA' || prio === 'CRÍTICA' || prio === '4' ? 4
+    const criticidade = prio === 'CRITICA' || prio === 'CRÍTICA' || prio === '1' ? 1
+      : prio === 'ALTA' || prio === '2' ? 2
+      : prio === 'MEDIA' || prio === 'MÉDIA' || prio === '3' ? 3
+      : prio === 'BAIXA' || prio === '4' ? 4
       : null;
+    const numeroNota = String(saf.ccm_numero_nota || integ.qmnum || '').trim();
+    const numeroOrdem = String(saf.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
+    const numeroOcorrencia = String(saf._numero_ocorrencia || '').trim();
+    const textoLongoAprovacao = String(
+      saf.ccm_texto_longo_nota ||
+      integ.texto_longo_nota ||
+      ''
+    ).trim();
+    const centroTrabalhoAprovacao = String(saf.ccm_centro_trabalho || '').trim() || '—';
+    const sintomaAprovacao = String(
+      saf.sintoma_descricao ||
+      readDescricaoCampo(textoLongoAprovacao, 'SINTOMA') ||
+      readDescricaoCampo(textoLongoAprovacao, 'Sintoma') ||
+      readDescricaoCampo(saf.descricao_longa, 'Sintoma') ||
+      ''
+    ).trim() || '—';
+    const prioridadeAprovacao = String(saf.prioridade || '').trim() || '—';
+    const notaAprovacao = numeroNota || '—';
+    const ordemAprovacao = numeroOrdem || '—';
+    const tituloCard = status === 'APROVADA' && !numeroOrdem
+      ? `SAF ${ticket}`
+      : (saf.titulo_falha || '—');
+    const criticidadeTexto = descricaoCriticidadePadrao(String(criticidade || ''));
     const criticidadeHtml = `
-      <div class="ccm-criticidade ${isEditable ? '' : 'is-locked'}">
-        <div class="ccm-criticidade-title">Criticidade </div>
+      <div class="ccm-criticidade is-locked">
+        <div class="ccm-criticidade-title">Criticidade (informada na SAF)</div>
         <div class="ccm-criticidade-options">
-          <label class="ccm-criticidade-option"><input type="radio" name="crit-${id}" value="1" ${criticidade === 1 ? 'checked' : ''} ${isEditable ? `onchange="window._ccmSetPrioridade('${id}', 1)"` : 'disabled'}> Baixa (1)</label>
-          <label class="ccm-criticidade-option"><input type="radio" name="crit-${id}" value="2" ${criticidade === 2 ? 'checked' : ''} ${isEditable ? `onchange="window._ccmSetPrioridade('${id}', 2)"` : 'disabled'}> Média (2)</label>
-          <label class="ccm-criticidade-option"><input type="radio" name="crit-${id}" value="3" ${criticidade === 3 ? 'checked' : ''} ${isEditable ? `onchange="window._ccmSetPrioridade('${id}', 3)"` : 'disabled'}> Alta (3)</label>
-          <label class="ccm-criticidade-option"><input type="radio" name="crit-${id}" value="4" ${criticidade === 4 ? 'checked' : ''} ${isEditable ? `onchange="window._ccmSetPrioridade('${id}', 4)"` : 'disabled'}> Muito alta (4)</label>
+          <span class="ccm-criticidade-option is-selected">&#9679; ${escHtml(criticidadeTexto)}</span>
         </div>
       </div>`;
 
@@ -1290,8 +1423,6 @@
     let qmnumBadge = '';
     let ordemBadge = '';
     let duplicadaBadge = '';
-    const numeroNota = String(saf.ccm_numero_nota || integ.qmnum || '').trim();
-    const numeroOrdem = String(saf.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
 
     const isDuplicadaVisual = Boolean(saf.is_duplicada || saf.qmnum_duplicata || status === 'DUPLICADA');
     duplicadaBadge = isDuplicadaVisual
@@ -1307,13 +1438,12 @@
       }
     } else if (integ.status_integracao === 'ERRO') {
       qmnumBadge = `<span class="badge" style="background:#7f1d1d;color:#fff;" title="Erro na integração SAP: ${integ.mensagem_erro || ''}">&#9888; SAP ERRO</span>`;
-    } else if (status === 'APROVADA') {
-      qmnumBadge = `<span class="badge" style="background:#78350f;color:#fff;" title="Aguardando criação da nota no SAP">&#8987; SAP PENDENTE</span>`;
     }
 
     // Meta info row
     const metaParts = [];
     if (saf.local_instalacao) metaParts.push(`${saf.local_instalacao}`);
+    if (numeroOcorrencia) metaParts.push(`Ocorrência: ${numeroOcorrencia}`);
     if (item.data_avaliacao) metaParts.push(`&#128197; ${Fmt.datetime(item.data_avaliacao)}`);
 
     // Action buttons
@@ -1328,7 +1458,7 @@
         <button class="btn btn-sm ccm-btn-danger-outline" onclick="window._ccmMostrarRecusa('${id}')">&#10007; Recusar</button>
         ${dupCheck}`;
     } else if (status === 'APROVADA') {
-      actionsHtml = `<span style="font-size:.8rem;color:var(--green);font-weight:600;">&#10004; Aprovada</span>`;
+      actionsHtml = `<button class="btn btn-outline btn-sm" onclick="window._ccmMostrarAceite('${id}')">✏️ Editar</button>`;
     } else if (status === 'DEVOLVIDA') {
       actionsHtml = `<span style="font-size:.8rem;color:var(--warning);font-weight:600;">&#8617; Devolvida</span>`;
     } else if (status === 'CANCELADA') {
@@ -1346,6 +1476,26 @@
       : (status === 'CANCELADA' && item.motivo_cancelamento)
       ? `<div class="ccm-motivo-box" style="color:#7f1d1d;background:#fff1f2;border-color:#f87171;">&#10006; <em>Cancelamento:</em> ${item.motivo_cancelamento}</div>`
       : '';
+
+    const conteudoCardAprovada = (status === 'APROVADA')
+      ? `
+          <div class="ccm-meta-row" style="display:block;line-height:1.45;">
+            <div><strong>Centro de trabalho:</strong> ${escHtml(centroTrabalhoAprovacao)}</div>
+            <div><strong>Sintoma:</strong> ${escHtml(sintomaAprovacao)}</div>
+            <div><strong>Prioridade:</strong> ${escHtml(prioridadeAprovacao)}</div>
+            <div><strong>Nota:</strong> ${escHtml(notaAprovacao)}</div>
+            <div><strong>Ordem:</strong> ${escHtml(ordemAprovacao)}</div>
+          </div>
+          <div class="ccm-desc">${formatDescricaoComOcorrencia(textoLongoAprovacao || saf.descricao_longa || '—')}</div>
+        `
+      : `
+          <div class="ccm-title">${tituloCard}</div>
+          ${saf.descricao_longa ? `<div class="ccm-desc">${formatDescricaoComOcorrencia(saf.descricao_longa)}</div>` : ''}
+          <div class="ccm-meta-row">
+            ${metaParts.map(p => `<span>${p}</span>`).join('')}
+          </div>
+          ${motivoHtml}
+        `;
 
     return `
       <div class="ccm-card" id="card-${id}">
@@ -1376,17 +1526,12 @@
           }
         </div>
         <div class="ccm-card-content">
-          <div class="ccm-title">${saf.titulo_falha || '—'}</div>
-          ${saf.descricao_longa ? `<div class="ccm-desc">${formatDescricaoComOcorrencia(saf.descricao_longa)}</div>` : ''}
-          <div class="ccm-meta-row">
-            ${metaParts.map(p => `<span>${p}</span>`).join('')}
-          </div>
-          ${motivoHtml}
+          ${conteudoCardAprovada}
         </div>
         <div class="ccm-card-actions">
           <div class="ccm-card-actions-row">
             <div class="ccm-criticidade-col">${criticidadeHtml}</div>
-            <div class="ccm-action-buttons ${isEditable ? '' : 'is-locked'}" id="actions-${id}">${actionsHtml}${isEditable ? '' : '<span class="ccm-lock-note">Bloqueado para edicao</span>'}</div>
+            <div class="ccm-action-buttons" id="actions-${id}">${actionsHtml}</div>
           </div>
         </div>
       </div>`;
@@ -1394,24 +1539,28 @@
 
   // ───────── Actions ─────────
   function nivelToPrioridade(nivel) {
-    if (String(nivel) === '1') return 'BAIXA';
-    if (String(nivel) === '2') return 'MEDIA';
-    if (String(nivel) === '3') return 'ALTA';
-    if (String(nivel) === '4') return 'CRITICA';
+    if (String(nivel) === '1') return 'CRITICA';
+    if (String(nivel) === '2') return 'ALTA';
+    if (String(nivel) === '3') return 'MEDIA';
+    if (String(nivel) === '4') return 'BAIXA';
     return 'MEDIA';
   }
 
-  async function setPrioridade(id, nivel) {
-    const prioridade = nivelToPrioridade(nivel);
-    const res = await API.put(`/ccm/prioridade/${id}`, { prioridade });
-    if (!res.ok) {
-      Toast.error(res.data.erro || 'Erro ao atualizar criticidade.');
-      renderQueue();
-      return;
-    }
-    const item = allSafs.find(s => s.id === id);
-    if (item) item.prioridade = prioridade;
-    Toast.success('Criticidade atualizada.');
+  function prioridadeToNivelSap(prioridade) {
+    const p = String(prioridade || '').trim().toUpperCase();
+    if (p === 'CRITICA' || p === 'CRÍTICA' || p === '1') return '1';
+    if (p === 'ALTA' || p === '2') return '2';
+    if (p === 'MEDIA' || p === 'MÉDIA' || p === '3') return '3';
+    if (p === 'BAIXA' || p === '4') return '4';
+    return '';
+  }
+
+  function descricaoCriticidadePadrao(nivel) {
+    if (String(nivel) === '1') return '1 - BAIXA IMEDIATA DE SERVIÇO (TREM PARADO)';
+    if (String(nivel) === '2') return '2 - SUPRESSÃO CONSEQUENTE (OPERAÇÃO DEGRADADA)';
+    if (String(nivel) === '3') return '3 - IMPACTO CONTRATUAL (INDICADORES EST e MRO)';
+    if (String(nivel) === '4') return '4 - ATENDIMENTO PROGRAMÁVEL (PCM)';
+    return 'N/I';
   }
 
   function sanitizeSegment(value, fallback = 'N/I') {
@@ -1430,6 +1579,9 @@
   }
 
   function inferSistemaId(item) {
+    const direct = String(item?.sistema_id || '').trim();
+    if (direct) return direct;
+
     const local = String(item?.local_instalacao || '').trim();
     const localId = String(item?.local_instalacao_id || '').trim();
     const candidatos = [
@@ -1496,7 +1648,7 @@
     return 'N/I';
   }
 
-  function formatDataHoraBrasilNota(dateObj = new Date()) {
+  function formatDataHoraBrasilNota(dateObj = new Date(), item = null) {
     const parts = new Intl.DateTimeFormat('pt-BR', {
       timeZone: 'America/Sao_Paulo',
       day: '2-digit',
@@ -1517,7 +1669,9 @@
     const hh = byType.hour || '00';
     const mi = byType.minute || '00';
     const ss = byType.second || '00';
-    return `${dd}.${mm}.${yyyy} ${hh}:${mi}:${ss} BRAZIL (S-SAF-TRIVIA)`;
+    const solicitanteNome = String(item?.notificador_nome || item?.solicitante_nome || item?.nome_solicitante || '').trim();
+    const identificador = solicitanteNome || 'S-SAF-TRIVIA';
+    return `${dd}.${mm}.${yyyy} ${hh}:${mi}:${ss} BRAZIL (${identificador})`;
   }
 
   function nomeLinhaOficial(linha) {
@@ -1645,7 +1799,7 @@
   }
 
   async function carregarSintomasPorSistemaSubsistema(item) {
-    const sistemaId = inferSistemaId(item);
+    const sistemaId = String(item?.sistema_id || inferSistemaId(item) || '').trim();
     if (!sistemaId) return [];
 
     const subsistema = await resolverSubsistemaPorContexto(item, sistemaId);
@@ -1698,13 +1852,16 @@
     const localDetalhado = resolverLocalDetalhado(item, tipoLocal);
     const equipamento = sanitizeSegment(item?.equipamento || 'N/I', 'N/I');
     const sintoma = sanitizeSegment(sintomaDescricao || sintomaObj?.descricao || item?.titulo_falha || 'N/I', 'N/I');
+    const criticidadeTxt = descricaoCriticidadePadrao(prioridadeToNivelSap(item?.prioridade));
     const descricaoFalha = sanitizeSegment(
       readDescricaoCampo(String(item?.descricao_longa || ''), 'Descricao') || String(item?.descricao_longa || ''),
       'N/I'
     );
+    const numeroSaf = String(item?.ticket_saf || '').trim();
+    const prefixo = numeroSaf ? `#${numeroSaf.padStart(6, '0')} - ` : '';
 
-    const linhaPrincipal = formatDataHoraBrasilNota();
-    const linhaDetalhes = `LINHA: ${linhaOficial}, TIPO LOCAL: ${tipoLocal}, LOCAL: ${localDetalhado}, EQUIPAMENTO: ${equipamento}, SINTOMA: ${sintoma}, DESCRIÇÃO: ${descricaoFalha}`;
+    const linhaPrincipal = formatDataHoraBrasilNota(new Date(), item);
+    const linhaDetalhes = `${prefixo}LINHA: ${linhaOficial}, TIPO LOCAL: ${tipoLocal}, LOCAL: ${localDetalhado}, EQUIPAMENTO: ${equipamento}, SINTOMA: ${sintoma}, CRITICIDADE: ${criticidadeTxt}, DESCRIÇÃO: ${descricaoFalha}`;
 
     return `${linhaPrincipal}\n${linhaDetalhes}`;
   }
@@ -1840,21 +1997,43 @@
       sintomas = [];
     }
 
-    if (!sintomas.length) {
-      const equipamentoId = String(item?.equipamento_id || '').trim();
-      if (equipamentoId) {
-        const res = await API.sintomas(equipamentoId);
-        if (res.ok) {
-          sintomas = (res.data?.sintomas || []).map(s => ({
-            id: String(s.id || '').trim(),
-            descricao: String(s.descricao || '').trim(),
-            codigo: String(s.codigo || '').trim(),
-          })).filter(s => s.id);
-        }
+    let sintomasPorEquipamento = [];
+    const equipamentoId = String(item?.equipamento_id || '').trim();
+    if (equipamentoId) {
+      const res = await API.sintomas(equipamentoId);
+      if (res.ok) {
+        sintomasPorEquipamento = (res.data?.sintomas || []).map(s => ({
+          id: String(s.id || '').trim(),
+          descricao: String(s.descricao || '').trim(),
+          codigo: String(s.codigo || '').trim(),
+        })).filter(s => s.id);
       }
     }
 
-    sintomasModalCache = sintomas;
+    const mapaSintomas = new Map();
+    const origemPreferencial = sintomasPorEquipamento.length ? sintomasPorEquipamento : sintomas;
+    const origemComplementar = sintomasPorEquipamento.length ? sintomas : [];
+    [...origemPreferencial, ...origemComplementar].forEach(s => {
+      const sid = String(s?.id || '').trim();
+      if (!sid) return;
+      if (!mapaSintomas.has(sid)) mapaSintomas.set(sid, s);
+    });
+
+    const sintomaFallbackDescricao = (() => {
+      const textoLongo = String(item?.ccm_texto_longo_nota || item?.saf_integracao_sap?.texto_longo_nota || '');
+      const m = textoLongo.match(/SINTOMA:\s*([^,\n\r]+)/i);
+      return m && m[1] ? String(m[1]).trim() : '';
+    })();
+
+    if (sintomaPreSelecionado && !mapaSintomas.has(sintomaPreSelecionado)) {
+      mapaSintomas.set(sintomaPreSelecionado, {
+        id: sintomaPreSelecionado,
+        descricao: sintomaFallbackDescricao || 'Sintoma selecionado',
+        codigo: '',
+      });
+    }
+
+    sintomasModalCache = [...mapaSintomas.values()];
 
     if (!sintomasModalCache.length) {
       sel.innerHTML = '';
@@ -1923,6 +2102,7 @@
     const longoEl = document.getElementById('aceite-texto-longo');
     const notaEl = document.getElementById('aceite-numero-nota');
     const ordemEl = document.getElementById('aceite-numero-ordem');
+    const prioridadeEl = document.getElementById('aceite-prioridade');
 
     if (tipoNotaEl) tipoNotaEl.value = (item.tipo_nota || 'YE').toUpperCase() === 'YP' ? 'YP' : 'YE';
     if (centroEl) {
@@ -1933,6 +2113,7 @@
     if (longoEl) longoEl.value = item.ccm_texto_longo_nota || item.saf_integracao_sap?.texto_longo_nota || '';
     if (notaEl) notaEl.value = item.ccm_numero_nota || item.saf_integracao_sap?.qmnum || item.qmnum_duplicata || '';
     if (ordemEl) ordemEl.value = item.ccm_numero_ordem || item.saf_integracao_sap?.aufnr || item.saf_integracao_sap?.numero_ordem_sap || '';
+    if (prioridadeEl) prioridadeEl.value = prioridadeToNivelSap(item.prioridade);
 
     await carregarSintomasModal(item, String(item.sintoma_id || '').trim());
     preencherTextosSugestao();
@@ -1949,11 +2130,15 @@
 
     const tipoNota = (document.getElementById('aceite-tipo-nota')?.value || 'YE').toUpperCase();
     const sintomaId = (document.getElementById('aceite-sintoma')?.value || '').trim();
+    const sintomaDescricao = String(
+      sintomasModalCache.find(s => String(s.id || '').trim() === sintomaId)?.descricao || ''
+    ).trim();
     const textoBreve = (document.getElementById('aceite-texto-breve')?.value || '').trim();
     const textoLongo = (document.getElementById('aceite-texto-longo')?.value || '').trim();
     const qmnum = (document.getElementById('aceite-numero-nota')?.value || '').trim();
     const aufnr = (document.getElementById('aceite-numero-ordem')?.value || '').trim();
     const centroTrabalho = (document.getElementById('aceite-centro-trabalho')?.value || '').trim();
+    const prioridadeNivel = (document.getElementById('aceite-prioridade')?.value || '').trim();
 
     if (!centroTrabalho) {
       Toast.warning('Selecione o centro de trabalho.');
@@ -1971,9 +2156,12 @@
       Toast.warning('Informe o texto longo da nota.');
       return;
     }
+    if (!prioridadeNivel) {
+      Toast.warning('Selecione a prioridade SAP.');
+      return;
+    }
 
-    const nivelSelecionado = document.querySelector(`input[name="crit-${id}"]:checked`)?.value || '2';
-    const prioridade = nivelToPrioridade(nivelSelecionado);
+    const prioridade = nivelToPrioridade(prioridadeNivel);
     const gravarBtn = document.getElementById('btn-gravar-modal-aceite');
     if (gravarBtn) {
       gravarBtn.disabled = true;
@@ -1992,6 +2180,7 @@
       prioridade,
       centro_trabalho: centroTrabalho,
       sintoma_id: sintomaId,
+      sintoma_descricao: sintomaDescricao,
       texto_breve_nota: textoBreve,
       texto_longo_nota: textoLongo,
       qmnum,
@@ -2011,12 +2200,13 @@
 
     item.status = 'APROVADA';
     item.tipo_nota = tipoNota;
-    item.sintoma_id = sintomaId;
+    item.sintoma_id = String(res.data?.sintoma_id || sintomaId || '').trim();
     item.ccm_texto_breve_nota = textoBreve;
     item.ccm_texto_longo_nota = textoLongo;
     item.ccm_numero_nota = qmnum;
     item.ccm_numero_ordem = aufnr;
     item.ccm_centro_trabalho = centroTrabalho;
+    item.prioridade = prioridade;
     item.saf_integracao_sap = {
       ...(item.saf_integracao_sap || {}),
       qmnum: qmnum || null,
@@ -2042,6 +2232,7 @@
         s.ccm_numero_nota = qmnum;
         s.ccm_numero_ordem = aufnr;
         s.ccm_centro_trabalho = centroTrabalho;
+        s.prioridade = prioridade;
       });
     }
 
@@ -2158,7 +2349,6 @@
 
   // Expose for inline onclick handlers
   window._ccmAceitar       = aceitar;
-  window._ccmSetPrioridade = setPrioridade;
   window._ccmMostrarAceite  = mostrarAceite;
   window._ccmConfirmarRecusa = confirmarRecusa;
   window._ccmToggleDuplicadaItem = toggleDuplicadaItem;
@@ -2232,6 +2422,7 @@
         document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
         this.classList.add('active');
         activeFilter = this.dataset.filter;
+        syncApprovedOccurrenceFilterVisibility();
         renderQueue();
       });
     });
@@ -2253,13 +2444,25 @@
       renderQueue();
     });
 
+    document.getElementById('approved-occurrence-filter')?.addEventListener('input', function () {
+      activeOccurrenceSearchApproved = this.value || '';
+      renderQueue();
+    });
+
     document.getElementById('btn-clear-ccm-filters')?.addEventListener('click', function () {
       activeLine = '';
       activeStation = '';
       activeOrderSearch = '';
+      activeOccurrenceSearchApproved = '';
       activeDateFrom = '';
       activeDateTo = '';
+      activeSortOrder = 'mais_novos';
       syncFilterControls();
+      renderQueue();
+    });
+
+    document.getElementById('sort-order-filter')?.addEventListener('change', function () {
+      activeSortOrder = String(this.value || 'mais_novos');
       renderQueue();
     });
 

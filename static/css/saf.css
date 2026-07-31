@@ -226,6 +226,8 @@ input, select, textarea { font-family: inherit; }
   max-width: 1200px;
   margin: 0 auto;
   padding: 1.5rem 1.25rem;
+  overflow-y: auto;
+  max-height: calc(100dvh - 110px);
 }
 .page-header {
   display: flex;

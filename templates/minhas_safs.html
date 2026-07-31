@@ -63,7 +63,7 @@
   </div>
 
   <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem;">
-    <input id="minhas-ordem-search" type="search" class="form-control" placeholder="Pesquisar por numero da ordem" style="min-width:280px;max-width:560px;flex:1;">
+    <input id="minhas-ordem-search" type="search" class="form-control" placeholder="Pesquisar por numero da ocorrencia" style="min-width:280px;max-width:560px;flex:1;">
     <label for="minhas-days-range" style="font-size:.82rem;color:var(--text-muted);font-weight:600;">Periodo</label>
     <select id="minhas-days-range" class="form-control" style="width:170px;">
       <option value="7">Ultimos 7 dias</option>
@@ -98,14 +98,13 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   let allSafs = [];
   let activeFilter = 'TODAS';
-  let activeOrderSearch = '';
+  let activeOccurrenceSearch = '';
   let activeDaysRange = '30';
   let knownDevolvidas = new Set();
   let devolvidaMonitorInitialized = false;
 
-  function parseOrderNumber(saf) {
-    const integ = saf.saf_integracao_sap || {};
-    return String(saf.ccm_numero_ordem || integ.aufnr || integ.numero_ordem_sap || '').trim();
+  function parseOccurrenceNumber(saf) {
+    return String(saf.numero_ocorrencia || '').trim();
   }
 
   function withinDays(isoDateStr, days) {
@@ -209,9 +208,9 @@ document.addEventListener('DOMContentLoaded', async function () {
       ? allSafs
       : allSafs.filter(s => getStatus(s) === filter);
 
-    if (activeOrderSearch) {
-      const q = activeOrderSearch.trim().toLowerCase();
-      filtered = filtered.filter(s => parseOrderNumber(s).toLowerCase().includes(q));
+    if (activeOccurrenceSearch) {
+      const q = activeOccurrenceSearch.trim().toLowerCase();
+      filtered = filtered.filter(s => parseOccurrenceNumber(s).toLowerCase().includes(q));
     }
     filtered = filtered.filter(s => withinDays(s.criado_em, activeDaysRange));
 
@@ -240,6 +239,9 @@ document.addEventListener('DOMContentLoaded', async function () {
       const ordemId = ordem
         ? `<span class="font-mono" style="font-size:.8rem;">${ordem}</span>`
         : '<span class="text-muted">—</span>';
+      const ocorrenciaId = parseOccurrenceNumber(saf)
+        ? `<span class="font-mono" style="font-size:.8rem;">${parseOccurrenceNumber(saf)}</span>`
+        : '<span class="text-muted">—</span>';
       const devAlert = status === 'DEVOLVIDA'
         ? `<div style="font-size:.74rem;color:var(--purple);margin-top:2px;">⚠ ${(saf.motivo_devolucao||'').substring(0,50)}${saf.motivo_devolucao?.length > 50 ? '…' : ''}</div>`
         : '';
@@ -247,6 +249,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         <tr class="clickable" onclick="window.location.href='/saf/${saf.id}'">
           <td>${Fmt.ticket(saf.ticket_saf)}</td>
           <td>${sapId}</td>
+          <td>${ocorrenciaId}</td>
           <td>${ordemId}</td>
           <td>${Fmt.statusBadge(status)} ${devAlert}</td>
           <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${saf.titulo || saf.titulo_falha || '—'}</td>
@@ -261,6 +264,7 @@ document.addEventListener('DOMContentLoaded', async function () {
           <tr>
             <th>Ticket SAF</th>
             <th>Nota</th>
+            <th>N° Ocorrência</th>
             <th>Ordem</th>
             <th>Status</th>
             <th>Descrição</th>
@@ -283,7 +287,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   });
 
   document.getElementById('minhas-ordem-search')?.addEventListener('input', function () {
-    activeOrderSearch = this.value || '';
+    activeOccurrenceSearch = this.value || '';
     renderTable(activeFilter);
   });
 
