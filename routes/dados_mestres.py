@@ -21,7 +21,7 @@ def _get_supabase_client() -> Client:
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
         if not supabase_url or not supabase_key:
-            raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_KEY nao configuradas.")
+            raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_KEY não configuradas.")
         _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
@@ -64,7 +64,7 @@ def listar_centros_trabalho():
         return jsonify({"centros": centros, "total": len(centros)}), 200
     except Exception:
         logger.exception('Erro ao listar centros de trabalho')
-        return jsonify({'erro': 'Nao foi possivel consultar os centros de trabalho.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os centros de trabalho.'}), 500
 
 
 @dados_bp.route("/locais", methods=["GET"])
@@ -143,7 +143,7 @@ def listar_locais():
         return jsonify({"locais": locais, "total": len(locais)}), 200
     except Exception:
         logger.exception('Erro ao listar locais')
-        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route("/equipamentos/<local_id_sap>", methods=["GET"])
@@ -224,7 +224,7 @@ def listar_equipamentos_por_local(local_id_sap):
         return jsonify({"equipamentos": equips, "total": len(equips)}), 200
     except Exception:
         logger.exception('Erro ao listar equipamentos por local=%s', local_id_sap)
-        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route("/sintomas/<equipamento_id_sap>", methods=["GET"])
@@ -276,7 +276,7 @@ def listar_sintomas_por_equipamento(equipamento_id_sap):
         }), 200
     except Exception:
         logger.exception('Erro ao listar sintomas por equipamento=%s', equipamento_id_sap)
-        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route("/estacoes", methods=["GET"])
@@ -316,7 +316,7 @@ def listar_estacoes():
         return _json_cached({"estacoes": estacoes, "total": len(estacoes)})
     except Exception:
         logger.exception('Erro ao listar estacoes')
-        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os dados mestres.'}), 500
 
 
 @dados_bp.route('/subsistemas', methods=['GET'])
@@ -351,7 +351,7 @@ def listar_subsistemas():
         return _json_cached({'subsistemas': subsistemas, 'total': len(subsistemas)})
     except Exception:
         logger.exception('Erro ao listar subsistemas')
-        return jsonify({'erro': 'Nao foi possivel consultar os subsistemas.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os subsistemas.'}), 500
 
 
 @dados_bp.route('/sistemas-por-tipo', methods=['GET'])
@@ -402,7 +402,7 @@ def listar_sistemas_por_tipo():
         return _json_cached({'sistemas': sistemas, 'total': len(sistemas)})
     except Exception:
         logger.exception('Erro ao listar sistemas por tipo=%s', tipo)
-        return jsonify({'erro': 'Nao foi possivel consultar os sistemas.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os sistemas.'}), 500
 
 
 @dados_bp.route('/prefetch-formulario', methods=['GET'])
@@ -477,7 +477,7 @@ def prefetch_formulario():
 
     except Exception:
         logger.exception('Erro ao prefetch formulario tipo=%s', tipo)
-        return jsonify({'erro': 'Nao foi possivel carregar os dados do formulario.'}), 500
+        return jsonify({'erro': 'Não foi possivel carregar os dados do formulario.'}), 500
 
 
 @dados_bp.route('/falhas', methods=['GET'])
@@ -563,7 +563,7 @@ def listar_falhas_por_subsistema():
         return jsonify({'falhas': falhas, 'total': len(falhas)}), 200
     except Exception:
         logger.exception('Erro ao listar falhas por sistema/subsistema')
-        return jsonify({'erro': 'Nao foi possivel consultar as falhas.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar as falhas.'}), 500
 
 
 @dados_bp.route('/opcoes-formulario', methods=['GET'])
@@ -716,7 +716,7 @@ def listar_opcoes_formulario():
 
     except Exception:
         logger.exception('Erro ao listar opcoes dinamicas do formulario')
-        return jsonify({'erro': 'Nao foi possivel consultar as opcoes do formulario.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar as opcoes do formulario.'}), 500
 
 
 @dados_bp.route("/sugerir", methods=["GET"])
@@ -744,7 +744,7 @@ def sugerir():
         supabase = _get_supabase_client()
     except RuntimeError:
         logger.exception('Configuracao Supabase ausente em sugerir')
-        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os dados mestres.'}), 500
 
     try:
         pattern = f"%{q}%"
@@ -941,4 +941,4 @@ def sugerir():
 
     except Exception:
         logger.exception('Erro ao gerar sugestoes')
-        return jsonify({'erro': 'Nao foi possivel consultar os dados mestres.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os dados mestres.'}), 500

@@ -1,0 +1,1311 @@
+{% extends "base.html" %}
+
+{% block title %}Manutenção{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+{% endblock %}
+
+{% block toolbar_nav %}
+<a href="/manutencao" class="nav-tab active">Manutenção</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+  <div class="page-header">
+    <div>
+      <p class="page-title" id="mt-title">Manutenção</p>
+      <p class="page-subtitle">Indicadores de SAFs aprovadas pelo CCM e evolução por sistema, centro de trabalho e período.</p>
+    </div>
+    <span id="mt-last-sync" style="font-size:.75rem;color:var(--text-muted);align-self:center;"></span>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value" id="mt-stat-geral">—</div>
+      <div class="stat-label">Total (abertas + aprovadas)</div>
+    </div>
+    <div class="stat-card accent">
+      <div class="stat-value" id="mt-stat-abertas">—</div>
+      <div class="stat-label">Abertas</div>
+    </div>
+    <div class="stat-card success">
+      <div class="stat-value" id="mt-stat-aprovadas">—</div>
+      <div class="stat-label">Aprovadas CCM</div>
+    </div>
+  </div>
+
+  <div class="filter-bar mt-top-filter">
+    <div id="mt-centros-menu" class="mt-centros-menu-inline"></div>
+  </div>
+
+  <div class="equip-filter-bar ccm-advanced-filters mt-filter-row">
+    <div class="mt-period-wrap">
+      <label class="equip-filter-label mt-period-label" for="mt-date-range-filter">Período</label>
+      <input id="mt-date-range-filter" class="equip-filter-select" type="text" placeholder="Selecione o intervalo de datas" readonly>
+    </div>
+  </div>
+
+  <div class="mt-grid">
+    <section class="card accent-top">
+      <div class="card-header"><h3 class="card-title">Estações mais afetadas</h3></div>
+      <div class="card-body"><div id="mt-chart-estacoes" class="mt-chart-list"></div></div>
+    </section>
+    <section class="card accent-top" id="mt-card-frotas">
+      <div class="card-header"><h3 class="card-title">Frotas de trens mais afetadas</h3></div>
+      <div class="card-body"><div id="mt-chart-frotas" class="mt-chart-list"></div></div>
+    </section>
+    <section class="card accent-top">
+      <div class="card-header"><h3 class="card-title">Locais de instalação mais afetados</h3></div>
+      <div class="card-body"><div id="mt-chart-locais" class="mt-chart-list"></div></div>
+    </section>
+    <section class="card accent-top">
+      <div class="card-header"><h3 class="card-title">Sintomas mais usados</h3></div>
+      <div class="card-body"><div id="mt-chart-sintomas" class="mt-chart-list"></div></div>
+    </section>
+    <section class="card accent-top">
+      <div class="card-header"><h3 class="card-title">Sistemas</h3></div>
+      <div class="card-body"><div id="mt-chart-sistemas" class="mt-chart-list"></div></div>
+    </section>
+    <section class="card accent-top">
+      <div class="card-header"><h3 class="card-title">Subsistemas</h3></div>
+      <div class="card-body"><div id="mt-chart-subsistemas" class="mt-chart-list"></div></div>
+    </section>
+    <section class="card accent-top mt-span-full" id="mt-card-centros">
+      <div class="card-header"><h3 class="card-title">Contribuição por centro de trabalho no sistema selecionado</h3></div>
+      <div class="card-body"><div id="mt-chart-centros" class="mt-chart-list"></div></div>
+    </section>
+  </div>
+</div>
+
+<style>
+.mt-top-filter {
+  margin-top: .55rem;
+  margin-bottom: .45rem;
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  flex-wrap: wrap;
+}
+.mt-centros-menu-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  flex-wrap: wrap;
+}
+.mt-centros-actions {
+  margin-top: .35rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .32rem;
+}
+.mt-centros-primary-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .32rem;
+}
+.mt-centros-actions-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .32rem;
+}
+.mt-centros-actions .btn { width: fit-content; }
+.mt-centros-menu-inline.is-column-mode.is-compact-controls .mt-centros-all-col {
+  flex: 0 0 auto;
+  width: auto;
+}
+.mt-centros-menu-inline.is-column-mode.is-compact-controls .mt-centros-actions {
+  width: auto;
+}
+.mt-centros-menu-inline.is-column-mode.is-compact-controls .mt-centros-primary-row {
+  flex-direction: row;
+  align-items: center;
+  gap: .32rem;
+  flex-wrap: nowrap;
+}
+.mt-centros-menu-inline.is-column-mode.is-compact-controls .mt-centros-actions-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: .32rem;
+}
+.mt-centros-menu-inline.is-column-mode.is-compact-controls .mt-centros-col {
+  align-items: center;
+}
+.mt-centros-menu-inline.is-column-mode {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: .85rem;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+.mt-centros-menu-inline.is-column-mode .mt-centros-col,
+.mt-centros-menu-inline.is-column-mode .mt-centros-all-col {
+  display: flex;
+  flex-direction: column;
+  gap: .34rem;
+}
+.mt-centros-menu-inline.is-column-mode .mt-centros-all-col {
+  flex: 0 0 auto;
+}
+.mt-centros-col.is-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+  min-width: 72px;
+}
+.mt-centros-groups-wrap {
+  display: grid;
+  grid-template-columns: repeat(var(--mt-group-cols, 4), minmax(0, max-content));
+  justify-content: start;
+  align-items: start;
+  column-gap: .6rem;
+  row-gap: .35rem;
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mt-filter-row { margin-top: 0; margin-bottom: .65rem; }
+.mt-filter-row .equip-filter-select { min-width: 220px; }
+#mt-date-range-filter,
+.mt-filter-row .flatpickr-input.equip-filter-select {
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+}
+.mt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; margin-top: .6rem; align-items: start; }
+.mt-span-full { grid-column: 1 / -1; }
+.card-body { display: flex; justify-content: center; }
+.mt-chart-list { display: flex; flex-direction: column; gap: .45rem; width: 100%; margin-left: auto; margin-right: auto; }
+#mt-chart-centros {
+  width: max-content;
+  max-width: min(100%, 380px);
+  overflow: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+.mt-empty { font-size: .85rem; color: var(--text-muted); }
+.mt-vchart { width: 100%; max-width: 560px; min-height: 180px; display: flex; flex-direction: column; gap: .7rem; }
+.mt-vbars-wrap { width: 100%; overflow-x: auto; overflow-y: hidden; }
+.mt-vbars {
+  min-width: max-content;
+  height: 150px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: .55rem;
+  padding: .25rem .2rem .1rem .2rem;
+}
+.mt-vbar-item { width: 32px; display: flex; flex-direction: column; align-items: center; gap: .24rem; height: 100%; }
+.mt-vbar-track {
+  width: 100%;
+  height: 128px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.mt-vbar {
+  width: 100%;
+  min-height: 6px;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, var(--accent), var(--primary));
+}
+.mt-vbar-num { font-size: .72rem; color: var(--text-muted); line-height: 1; }
+.mt-vlegend {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .38rem .75rem;
+  justify-items: start;
+  align-content: start;
+}
+.mt-vlegend-item {
+  display: flex;
+  align-items: center;
+  gap: .38rem;
+  width: 100%;
+}
+.mt-vlegend-dot { width: 9px; height: 9px; border-radius: 50%; }
+.mt-vlegend-label { font-size: .78rem; color: var(--text); overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.25; }
+.mt-pie-wrap { display: flex; align-items: flex-start; gap: .9rem; flex-wrap: nowrap; width: max-content; min-width: max-content; margin-left: auto; margin-right: auto; }
+.mt-pie-chart {
+  width: 220px;
+  height: 220px;
+  flex: 0 0 auto;
+}
+.mt-pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  width: max-content;
+  flex: 0 0 auto;
+}
+.mt-pie-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .35rem;
+}
+.mt-pie-dot { width: 10px; height: 10px; border-radius: 50%; }
+.mt-pie-label { font-size: .8rem; color: var(--text); overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.25; }
+.mt-pie-value { font-size: .78rem; color: var(--text-muted); text-align: left; }
+.sidebar-maint-block {
+  border-top: 1px solid var(--border);
+  margin-top: .75rem;
+  padding-top: .7rem;
+  padding-left: .55rem;
+  padding-right: .55rem;
+}
+.sidebar-maint-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-light); margin-bottom: .35rem; display: block; }
+.sidebar-maint-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .38rem .48rem;
+  background: var(--bg);
+  color: var(--text);
+  font-size: .82rem;
+}
+.sidebar-maint-centers {
+  margin-top: .6rem;
+  max-height: none;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: .28rem;
+}
+.sidebar-maint-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 8px;
+  font-size: .78rem;
+  padding: .3rem .5rem;
+  cursor: pointer;
+}
+.sidebar-maint-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,92,17,.08); }
+.mt-period-wrap {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: nowrap;
+}
+.mt-period-label {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+}
+.mt-period-wrap .equip-filter-select,
+.mt-period-wrap .flatpickr-input.equip-filter-select {
+  flex: 1 1 auto;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+@media (max-width: 980px) {
+  .mt-grid { grid-template-columns: 1fr; }
+  #mt-date-range-filter,
+  .mt-filter-row .flatpickr-input.equip-filter-select {
+    width: 220px !important;
+    min-width: 220px !important;
+    max-width: 220px !important;
+  }
+  .mt-period-wrap { max-width: 100%; }
+}
+@media (max-width: 970px) {
+  .mt-centros-menu-inline.is-column-mode {
+    flex-wrap: wrap;
+  }
+  .mt-centros-menu-inline.is-column-mode .mt-centros-all-col {
+    flex: 1 0 100%;
+    width: 100%;
+  }
+  .mt-centros-menu-inline.is-column-mode .mt-centros-actions {
+    width: 100%;
+  }
+  .mt-centros-menu-inline.is-column-mode .mt-centros-primary-row {
+    flex-direction: row;
+    align-items: center;
+    gap: .32rem;
+    flex-wrap: nowrap;
+  }
+  .mt-centros-menu-inline.is-column-mode .mt-centros-actions-inline {
+    flex-direction: row;
+    align-items: center;
+    gap: .32rem;
+  }
+}
+@media (max-width: 400px) {
+  #mt-chart-centros {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .mt-pie-wrap {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+  }
+  .mt-pie-legend {
+    width: 100%;
+    align-items: center;
+  }
+  .mt-pie-item {
+    justify-content: center;
+  }
+}
+@media (max-width: 826px) {
+  .mt-centros-menu-inline.is-column-mode .mt-centros-col .filter-tab { font-size: .78rem; }
+}
+</style>
+{% endblock %}
+
+{% block page_script %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  const user = Auth.requireAuth(['MANUTENCAO', 'ADMIN']);
+  if (!user) return;
+
+  let activeSistemaId = '';
+  let activeSubsistemaId = '';
+  let activeCentro = '';
+  let sidebarCentroSelection = '';
+  let activeDateFrom = '';
+  let activeDateTo = '';
+  let dateRangePicker = null;
+  let dashboardData = null;
+
+  function setLastSync() {
+    const el = document.getElementById('mt-last-sync');
+    if (!el) return;
+    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.textContent = `Atualizado às ${now}`;
+  }
+
+  function renderBarList(containerId, rows, usePercent = false) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const data = Array.isArray(rows) ? rows : [];
+    if (!data.length) {
+      container.innerHTML = '<div class="mt-empty">Sem dados para os filtros selecionados.</div>';
+      return;
+    }
+    const palette = ['#FF8A3D', '#2A7DE1', '#6CC070', '#A873E8', '#18B7B0', '#F2B23A', '#E75B8A', '#6A7A89', '#7D5CE6', '#2FBF71'];
+    const max = Math.max(...data.map(r => Number(r.total || 0)), 1);
+
+    const bars = data.map((row, index) => {
+      const total = Number(row.total || 0);
+      const pct = Math.max(8, Math.round((total / max) * 100));
+      const color = palette[index % palette.length];
+      return `
+        <div class="mt-vbar-item" title="${String(row.label || '')}: ${total}">
+          <div class="mt-vbar-track">
+            <div class="mt-vbar" style="height:${pct}%;background:${color};"></div>
+          </div>
+          <div class="mt-vbar-num">${total}</div>
+        </div>`;
+    }).join('');
+
+    const legend = data.map((row, index) => {
+      const color = palette[index % palette.length];
+      return `
+        <div class="mt-vlegend-item">
+          <span class="mt-vlegend-dot" style="background:${color};"></span>
+          <span class="mt-vlegend-label" title="${String(row.label || '')}">${String(row.label || '')}</span>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="mt-vchart">
+        <div class="mt-vbars-wrap">
+          <div class="mt-vbars">${bars}</div>
+        </div>
+        <div class="mt-vlegend">${legend}</div>
+      </div>
+    `;
+  }
+
+  function renderPieChart(containerId, rows) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const data = (Array.isArray(rows) ? rows : [])
+      .map(row => ({
+        label: String(row?.label || ''),
+        total: Number(row?.total || 0),
+        percentual: Number(row?.percentual || 0),
+      }))
+      .filter(row => row.label && row.total > 0);
+
+    if (!data.length) {
+      container.innerHTML = '<div class="mt-empty">Sem dados para os filtros selecionados.</div>';
+      return;
+    }
+
+    const palette = ['#FF8A3D', '#2A7DE1', '#6CC070', '#A873E8', '#18B7B0', '#F2B23A', '#E75B8A', '#6A7A89', '#7D5CE6', '#2FBF71'];
+    let start = 0;
+    const slices = data.map((row, index) => {
+      const percent = Math.max(0, Number(row.percentual || 0));
+      const end = start + percent;
+      const color = palette[index % palette.length];
+      const slice = { ...row, color, start, end };
+      start = end;
+      return slice;
+    });
+
+    const center = 110;
+    const radius = 96;
+    const toRad = (deg) => ((deg - 90) * Math.PI) / 180;
+    const pointAt = (deg) => ({
+      x: center + radius * Math.cos(toRad(deg)),
+      y: center + radius * Math.sin(toRad(deg)),
+    });
+    const paths = slices.map((s) => {
+      const startDeg = (s.start / 100) * 360;
+      const endDeg = (s.end / 100) * 360;
+      const delta = endDeg - startDeg;
+      if (delta >= 359.999) {
+        return `<circle cx="${center}" cy="${center}" r="${radius}" fill="${s.color}"></circle>`;
+      }
+      const p1 = pointAt(startDeg);
+      const p2 = pointAt(endDeg);
+      const largeArc = delta > 180 ? 1 : 0;
+      return `<path d="M ${center} ${center} L ${p1.x.toFixed(3)} ${p1.y.toFixed(3)} A ${radius} ${radius} 0 ${largeArc} 1 ${p2.x.toFixed(3)} ${p2.y.toFixed(3)} Z" fill="${s.color}"></path>`;
+    }).join('');
+
+    const legend = slices.map(s => `
+      <div class="mt-pie-item">
+        <span class="mt-pie-dot" style="background:${s.color};"></span>
+        <span class="mt-pie-label" title="${s.label}">${s.label}</span>
+        <span class="mt-pie-value">${s.total} (${s.percentual.toFixed(2)}%)</span>
+      </div>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="mt-pie-wrap">
+        <svg class="mt-pie-chart" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" aria-label="Gráfico de contribuição por centro">
+          <circle cx="${center}" cy="${center}" r="${radius}" fill="#ffffff" stroke="var(--border)" stroke-width="1"></circle>
+          ${paths}
+        </svg>
+        <div class="mt-pie-legend">${legend}</div>
+      </div>
+    `;
+  }
+
+  function renderStats(data) {
+    const totais = data?.totais || {};
+    document.getElementById('mt-stat-geral').textContent = Number(totais.geral || 0);
+    document.getElementById('mt-stat-abertas').textContent = Number(totais.abertas || 0);
+    document.getElementById('mt-stat-aprovadas').textContent = Number(totais.aprovadas_ccm || 0);
+  }
+
+  function shouldShowFrotasChart() {
+    const canShowBySistema = !activeSistemaId || String(activeSistemaId) === '1';
+    if (!canShowBySistema) return false;
+
+    const centroSelecionado = String(activeCentro || '').trim().toUpperCase();
+    if (!centroSelecionado) return true;
+
+    return centroSelecionado === 'TV36MCAF' || centroSelecionado === 'TV36MMRO';
+  }
+
+  function updateFrotasVisibility() {
+    const card = document.getElementById('mt-card-frotas');
+    if (!card) return;
+    card.style.display = shouldShowFrotasChart() ? '' : 'none';
+  }
+
+  function updateCentrosContributionVisibility() {
+    const card = document.getElementById('mt-card-centros');
+    if (!card) return;
+    card.style.display = activeCentro ? 'none' : '';
+  }
+
+  function updateCentrosMenuLayout() {
+    const menu = document.getElementById('mt-centros-menu');
+    if (!menu) return;
+    if (!menu.classList.contains('is-column-mode')) {
+      menu.classList.remove('is-compact-controls');
+      menu.style.removeProperty('--mt-group-cols');
+      return;
+    }
+    const cols = [...menu.querySelectorAll('.mt-centros-col')];
+    if (!cols.length) {
+      menu.classList.remove('is-compact-controls');
+      menu.style.removeProperty('--mt-group-cols');
+      return;
+    }
+    const colsPerRow = getCentrosColumnsPerRow(menu, cols.length);
+    menu.style.setProperty('--mt-group-cols', String(colsPerRow));
+    const forceCompactByWidth = window.innerWidth < 970;
+    menu.classList.toggle('is-compact-controls', forceCompactByWidth);
+    fitCentrosColumnsToAvailableWidth(menu);
+  }
+
+  function getCentrosColumnsPerRow(menu, totalCols = 8) {
+    const minCols = 4;
+    const maxCols = 8;
+    const total = Math.max(minCols, Math.min(maxCols, Number(totalCols || 0)));
+    return total;
+  }
+
+  function fitCentrosColumnsToAvailableWidth(menu) {
+    const target = menu || document.getElementById('mt-centros-menu');
+    if (!target) return;
+
+    const wrap = target.querySelector('.mt-centros-groups-wrap');
+    if (!wrap) return;
+
+    const minCols = 4;
+    const cols = [...target.querySelectorAll('.mt-centros-col')];
+    const maxCols = Math.max(minCols, Math.min(8, cols.length || 8));
+
+    let fitted = maxCols;
+    target.style.setProperty('--mt-group-cols', String(fitted));
+
+    while (fitted > minCols) {
+      const overflows = wrap.scrollWidth > (wrap.clientWidth + 1);
+      if (!overflows) break;
+      fitted -= 1;
+      target.style.setProperty('--mt-group-cols', String(fitted));
+    }
+  }
+
+  function renderCentrosMenu(data) {
+    const menu = document.getElementById('mt-centros-menu');
+    if (!menu) return;
+    const centrosRelacionados = activeSistemaId
+      ? (data?.filtros?.centros_relacionados || [])
+      : (data?.filtros?.centros_disponiveis || []);
+    if (!centrosRelacionados.length) {
+      menu.innerHTML = '';
+      menu.classList.remove('is-column-mode');
+      return;
+    }
+    const allBtnClass = activeCentro ? 'filter-tab' : 'filter-tab active';
+    const actionButtonsHtml = `
+      <div class="mt-centros-actions">
+        <div class="mt-centros-primary-row">
+          <button class="${allBtnClass}" type="button" data-centro="">Todos os centros</button>
+          <div class="mt-centros-actions-inline">
+            <button class="btn btn-accent btn-sm" id="mt-btn-export" type="button">Exportar Excel</button>
+            <button class="btn btn-outline btn-sm" id="mt-btn-export-pdf" type="button">Exportar PDF</button>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="mt-btn-clear" type="button">Limpar filtros</button>
+      </div>`;
+    const hasSistemaSelecionado = Boolean(activeSistemaId);
+    if (!hasSistemaSelecionado) {
+      const groupOrder = ['R', 'E', 'A', 'T', 'C', 'S', 'M', 'V'];
+      const grouped = {};
+      groupOrder.forEach(key => { grouped[key] = []; });
+      const others = [];
+      centrosRelacionados.forEach(codigo => {
+        const key = String(codigo || '').toUpperCase().charAt(4);
+        if (grouped[key]) grouped[key].push(codigo);
+        else others.push(codigo);
+      });
+
+      const colBlocks = groupOrder
+        .filter(key => grouped[key].length)
+        .map(key => {
+          const buttons = grouped[key].map(codigo => {
+            const cls = codigo === activeCentro ? 'filter-tab active' : 'filter-tab';
+            return `<button class="${cls}" type="button" data-centro="${codigo}">${codigo}</button>`;
+          }).join('');
+          return `<div class="mt-centros-col">${buttons}</div>`;
+        });
+
+      const othersButtons = others.map(codigo => {
+        const cls = codigo === activeCentro ? 'filter-tab active' : 'filter-tab';
+        return `<button class="${cls}" type="button" data-centro="${codigo}">${codigo}</button>`;
+      }).join('');
+
+      const normalizedCols = [...colBlocks];
+      if (othersButtons) {
+        if (normalizedCols.length < 8) {
+          normalizedCols.push(`<div class="mt-centros-col">${othersButtons}</div>`);
+        } else {
+          const lastIdx = normalizedCols.length - 1;
+          normalizedCols[lastIdx] = normalizedCols[lastIdx].replace('</div>', `${othersButtons}</div>`);
+        }
+      }
+      while (normalizedCols.length < 4) {
+        normalizedCols.push('<div class="mt-centros-col is-placeholder"><button class="filter-tab" type="button">—</button></div>');
+      }
+      if (normalizedCols.length > 8) {
+        normalizedCols.length = 8;
+      }
+
+      const colsPerRow = getCentrosColumnsPerRow(menu, normalizedCols.length);
+      const colsHtml = `
+        <div class="mt-centros-groups-wrap" style="--mt-group-cols:${colsPerRow};">
+          ${normalizedCols.join('')}
+        </div>`;
+
+      menu.classList.add('is-column-mode');
+      menu.innerHTML = `
+        <div class="mt-centros-all-col">
+          ${actionButtonsHtml}
+        </div>
+        ${colsHtml}`;
+    } else {
+      menu.classList.remove('is-column-mode');
+      menu.innerHTML = `<div class="mt-centros-all-col">
+          ${actionButtonsHtml}
+        </div>` +
+        centrosRelacionados.map(c => {
+          const cls = c === activeCentro ? 'filter-tab active' : 'filter-tab';
+          return `<button class="${cls}" type="button" data-centro="${c}">${c}</button>`;
+        }).join('');
+    }
+    menu.querySelectorAll('button[data-centro]').forEach(btn => {
+      btn.addEventListener('click', async function () {
+        activeCentro = this.dataset.centro || '';
+        if (!sidebarCentroSelection) sidebarCentroSelection = '';
+        await loadDashboard({ showFilterToast: true });
+      });
+    });
+
+    const btnExport = document.getElementById('mt-btn-export');
+    if (btnExport) {
+      btnExport.onclick = function () {
+        exportarExcel(this);
+      };
+    }
+
+    const btnExportPdf = document.getElementById('mt-btn-export-pdf');
+    if (btnExportPdf) {
+      btnExportPdf.onclick = function () {
+        exportarDashboardPdf(this);
+      };
+    }
+
+    const btnClear = document.getElementById('mt-btn-clear');
+    if (btnClear) {
+      btnClear.onclick = async function () {
+        activeCentro = sidebarCentroSelection || '';
+        activeDateFrom = '';
+        activeDateTo = '';
+        if (dateRangePicker) dateRangePicker.clear(false);
+        await loadDashboard();
+      };
+    }
+
+    requestAnimationFrame(updateCentrosMenuLayout);
+  }
+
+  function renderSidebarFilters(data) {
+    const nav = document.getElementById('sidebar-nav');
+    if (!nav) return;
+
+    let block = document.getElementById('sidebar-maint-block');
+    if (!block) {
+      block = document.createElement('div');
+      block.id = 'sidebar-maint-block';
+      block.className = 'sidebar-maint-block';
+      nav.appendChild(block);
+    }
+
+    const sistemas = data?.filtros?.sistemas || [];
+    const subsistemasMap = data?.filtros?.subsistemas_por_sistema || {};
+    const centrosDisponiveis = data?.filtros?.centros_disponiveis || [];
+    const optionsHtml = ['<option value="">Todos os sistemas</option>']
+      .concat(sistemas.map(s => `<option value="${s.id}">${s.nome}</option>`))
+      .join('');
+    const subsistemasList = activeSistemaId ? (subsistemasMap[activeSistemaId] || []) : [];
+    const subsistemaOptionsHtml = ['<option value="">Todos os subsistemas</option>']
+      .concat(subsistemasList.map(s => `<option value="${s.id}">${s.nome}</option>`))
+      .join('');
+
+    const centerButtons = ['<button class="sidebar-maint-btn" data-sb-centro="">Todos os centros</button>']
+      .concat(centrosDisponiveis.map(c => `<button class="sidebar-maint-btn" data-sb-centro="${c}">${c}</button>`))
+      .join('');
+
+    block.innerHTML = `
+      <span class="sidebar-maint-title">Sistema</span>
+      <select id="sidebar-sistema-filter" class="sidebar-maint-select">${optionsHtml}</select>
+      <span class="sidebar-maint-title" style="margin-top:.6rem;">Subsistema</span>
+      <select id="sidebar-subsistema-filter" class="sidebar-maint-select">${subsistemaOptionsHtml}</select>
+      <span class="sidebar-maint-title" style="margin-top:.6rem;">Centros de trabalho</span>
+      <div class="sidebar-maint-centers">${centerButtons}</div>`;
+
+    const sistemaSelect = document.getElementById('sidebar-sistema-filter');
+    if (sistemaSelect) {
+      sistemaSelect.value = activeSistemaId;
+      sistemaSelect.onchange = async function () {
+        activeSistemaId = this.value || '';
+        activeSubsistemaId = '';
+        activeCentro = '';
+        await loadDashboard({ showFilterToast: true });
+      };
+    }
+    const subsistemaSelect = document.getElementById('sidebar-subsistema-filter');
+    if (subsistemaSelect) {
+      const hasCurrent = subsistemasList.some(s => String(s.id) === String(activeSubsistemaId));
+      if (!hasCurrent) activeSubsistemaId = '';
+      subsistemaSelect.value = activeSubsistemaId;
+      subsistemaSelect.onchange = async function () {
+        activeSubsistemaId = this.value || '';
+        await loadDashboard({ showFilterToast: true });
+      };
+    }
+
+    block.querySelectorAll('[data-sb-centro]').forEach(btn => {
+      const centerValue = btn.dataset.sbCentro || '';
+      if (centerValue === activeCentro) btn.classList.add('active');
+      btn.addEventListener('click', async function () {
+        sidebarCentroSelection = centerValue;
+        activeCentro = centerValue;
+        await loadDashboard({ showFilterToast: true });
+      });
+    });
+  }
+
+  function flattenForExport(value, prefix = '', out = {}) {
+    if (value === null || value === undefined) {
+      out[prefix] = '';
+      return out;
+    }
+
+    if (Array.isArray(value)) {
+      out[prefix] = JSON.stringify(value);
+      return out;
+    }
+
+    if (typeof value === 'object') {
+      Object.entries(value).forEach(([key, nestedValue]) => {
+        const nestedPrefix = prefix ? `${prefix}.${key}` : key;
+        if (nestedValue && typeof nestedValue === 'object' && !Array.isArray(nestedValue)) {
+          flattenForExport(nestedValue, nestedPrefix, out);
+          return;
+        }
+        if (Array.isArray(nestedValue)) {
+          out[nestedPrefix] = JSON.stringify(nestedValue);
+          return;
+        }
+        out[nestedPrefix] = nestedValue ?? '';
+      });
+      return out;
+    }
+
+    out[prefix] = value;
+    return out;
+  }
+
+  const SISTEMA_NOME_MAP = {
+    '1': 'SISTEMA DE MATERIAL RODANTE',
+    '2': 'SISTEMA DE ENERGIA',
+    '3': 'SISTEMA DE REDE AÉREA',
+    '4': 'SISTEMA DE SINALIZAÇÃO',
+    '5': 'SISTEMA DE TELECOMUNICAÇÕES',
+    '6': 'SISTEMA DE VIA PERMANENTE',
+    '7': 'SISTEMA DE CIVIL',
+    '8': 'SISTEMA DE AUXILIARES',
+  };
+
+  function sistemaNomeSemNumero(rawValue) {
+    const txt = String(rawValue || '').trim();
+    if (!txt) return '';
+    return txt.replace(/^\s*\d+\s*-\s*/u, '').trim();
+  }
+
+  function resolverSistemaNome(item) {
+    const fromItem = sistemaNomeSemNumero(item?.sistema_nome || item?.sistema || '');
+    if (fromItem) return fromItem;
+    return SISTEMA_NOME_MAP[String(item?.sistema_id || '').trim()] || '';
+  }
+
+  function resolverSubsistemaNome(item) {
+    const fromItem = String(item?.subsistema || item?.subsistema_nome || '').trim();
+    if (fromItem) return fromItem;
+
+    const subsistemaId = String(item?.subsistema_id || '').trim();
+    if (!subsistemaId) return '';
+
+    const subsistemasPorSistema = dashboardData?.filtros?.subsistemas_por_sistema || {};
+    const listas = Object.values(subsistemasPorSistema);
+    for (const lista of listas) {
+      const hit = (lista || []).find(sub => String(sub?.id || '').trim() === subsistemaId);
+      if (hit?.nome) return String(hit.nome).trim();
+    }
+
+    return '';
+  }
+
+  function formatDateTimeInBrasilia(value) {
+    if (!value) return { date: '', time: '' };
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return { date: '', time: '' };
+
+    const parts = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(dt);
+
+    const pick = (type) => parts.find(p => p.type === type)?.value || '';
+    return {
+      date: `${pick('day')}/${pick('month')}/${pick('year')}`,
+      time: `${pick('hour')}:${pick('minute')}:${pick('second')}`,
+    };
+  }
+
+  function moveHeaderAfter(headers, target, anchor) {
+    if (!headers.includes(target) || !headers.includes(anchor)) return headers;
+    if (target === anchor) return headers;
+    const withoutTarget = headers.filter(h => h !== target);
+    const anchorIndex = withoutTarget.indexOf(anchor);
+    if (anchorIndex < 0) return headers;
+    withoutTarget.splice(anchorIndex + 1, 0, target);
+    return withoutTarget;
+  }
+
+  const EXPORT_HEADER_ORDER = [
+    'id',
+    'ticket_saf',
+    'criado_data',
+    'criado_hora',
+    'notificador_nome',
+    'notificador_area',
+    'atualizado_sap',
+    'avaliado_por',
+    'data_avaliacao_data',
+    'data_avaliacao_hora',
+    'numero_ocorrencia',
+    'ccm_centro_trabalho',
+    'ccm_numero_nota',
+    'ccm_numero_ordem',
+    'ccm_texto_breve_nota',
+    'ccm_texto_longo_nota',
+    'data_inicio_avaria',
+    'hora_inicio_avaria',
+    'descricao_longa',
+    'equipamento',
+    'equipamento_id',
+    'km_final',
+    'km_inicial',
+    'local_instalacao',
+    'local_instalacao_id',
+    'motivo_cancelamento',
+    'motivo_devolucao',
+    'prioridade',
+    'qmnum_duplicata',
+    'saf_integracao_sap.aufnr',
+    'saf_integracao_sap.mensagem_erro',
+    'saf_integracao_sap.numero_ordem_sap',
+    'saf_integracao_sap.qmnum',
+    'saf_integracao_sap.status_integracao',
+    'saf_integracao_sap.texto_breve_nota',
+    'saf_integracao_sap.texto_longo_nota',
+    'saf_integracao_sap.tipo_nota',
+    'sintoma_id',
+    'sistema_id',
+    'sistema_nome',
+    'status',
+    'subsistema_id',
+    'subsistema',
+    'tipo_nota',
+    'titulo_falha',
+    'via_numero',
+    '_linha',
+    '_estacao',
+    '_data_notificacao',
+    '_numero_ocorrencia',
+    'saf_integracao_sap',
+    'anexo_evidencia_url',
+  ];
+
+  function reorderExportHeaders(headers) {
+    const unique = [...new Set((headers || []).filter(Boolean))];
+    const ordered = EXPORT_HEADER_ORDER.filter(h => unique.includes(h));
+    unique.forEach(h => {
+      if (!ordered.includes(h)) ordered.push(h);
+    });
+    return ordered;
+  }
+
+  function getExportRows(items) {
+    return items.map(item => {
+      const base = {
+        anexo_evidencia_url: item.anexo_evidencia_url ?? '',
+        atualizado_sap: item.atualizado_sap ?? '',
+        avaliado_por: item.avaliado_por ?? '',
+        ccm_centro_trabalho: item.ccm_centro_trabalho ?? '',
+        ccm_numero_nota: item.ccm_numero_nota ?? '',
+        ccm_numero_ordem: item.ccm_numero_ordem ?? '',
+        ccm_texto_breve_nota: item.ccm_texto_breve_nota ?? '',
+        ccm_texto_longo_nota: item.ccm_texto_longo_nota ?? '',
+        criado_em: item.criado_em ?? '',
+        data_avaliacao: item.data_avaliacao ?? '',
+        data_inicio_avaria: item.data_inicio_avaria ?? '',
+        descricao_longa: item.descricao_longa ?? '',
+        equipamento: item.equipamento ?? '',
+        equipamento_id: item.equipamento_id ?? '',
+        hora_inicio_avaria: item.hora_inicio_avaria ?? '',
+        id: item.id ?? '',
+        km_final: item.km_final ?? '',
+        km_inicial: item.km_inicial ?? '',
+        local_instalacao: item.local_instalacao ?? '',
+        local_instalacao_id: item.local_instalacao_id ?? '',
+        motivo_cancelamento: item.motivo_cancelamento ?? '',
+        motivo_devolucao: item.motivo_devolucao ?? '',
+        notificador_area: item.notificador_area ?? '',
+        notificador_id: item.notificador_id ?? '',
+        notificador_nome: item.notificador_nome ?? '',
+        numero_ocorrencia: item.numero_ocorrencia ?? '',
+        prioridade: item.prioridade ?? '',
+        qmnum_duplicata: item.qmnum_duplicata ?? '',
+        sintoma_id: item.sintoma_id ?? '',
+        sistema_id: item.sistema_id ?? '',
+        sistema_nome: resolverSistemaNome(item),
+        status: item.status ?? '',
+        subsistema_id: item.subsistema_id ?? '',
+        subsistema: resolverSubsistemaNome(item),
+        ticket_saf: item.ticket_saf ?? '',
+        tipo_nota: item.tipo_nota ?? '',
+        titulo_falha: item.titulo_falha ?? '',
+        via_numero: item.via_numero ?? '',
+        _linha: item._linha ?? '',
+        _estacao: item._estacao ?? '',
+        _data_notificacao: item._data_notificacao ?? '',
+        _numero_ocorrencia: item._numero_ocorrencia ?? '',
+        saf_integracao_sap: item.saf_integracao_sap ?? '',
+      };
+      const flattened = flattenForExport(base);
+      const criado = formatDateTimeInBrasilia(item.criado_em || flattened.criado_em);
+      const avaliacao = formatDateTimeInBrasilia(item.data_avaliacao || flattened.data_avaliacao);
+      const avaliadoPorNome = String(item.aprovador_nome || item.avaliado_por_nome || '').trim();
+
+      if ('avaliado_por' in flattened) {
+        flattened.avaliado_por = avaliadoPorNome;
+      }
+
+      flattened.criado_data = criado.date;
+      flattened.criado_hora = criado.time;
+      flattened.data_avaliacao_data = avaliacao.date;
+      flattened.data_avaliacao_hora = avaliacao.time;
+
+      delete flattened.criado_em;
+      delete flattened.data_avaliacao;
+      delete flattened.notificador_id;
+
+      if (!('saf_integracao_sap' in flattened)) flattened.saf_integracao_sap = '';
+      return Object.fromEntries(
+        Object.entries(flattened).map(([key, value]) => [key, value ?? ''])
+      );
+    });
+  }
+
+  function makeExportFileName() {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `fila_ccm_export_${stamp}.xlsx`;
+  }
+
+  function makePdfFileName() {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `dashboard_manutencao_${stamp}.pdf`;
+  }
+
+  function exportarExcel(btn) {
+    if (typeof XLSX === 'undefined') {
+      Toast.error('Biblioteca de exportacao indisponivel.');
+      return;
+    }
+    const rows = getExportRows(dashboardData?.registros_aprovados || []);
+    if (!rows.length) {
+      Toast.warning('Nao ha dados aprovados para exportar com os filtros atuais.');
+      return;
+    }
+    setLoading(btn, true, 'Exportando...');
+    try {
+      const headers = reorderExportHeaders(
+        rows.flatMap(row => Object.keys(row))
+      );
+      const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Fila CCM');
+      XLSX.writeFile(wb, makeExportFileName());
+      Toast.success(`Exportacao concluida (${rows.length} registro(s)).`);
+    } catch (_err) {
+      Toast.error('Nao foi possivel exportar a planilha.');
+    } finally {
+      setLoading(btn, false, 'Exportar Excel');
+    }
+  }
+
+  async function exportarDashboardPdf(btn) {
+    if (typeof html2canvas !== 'function' || !window.jspdf || !window.jspdf.jsPDF) {
+      Toast.error('Biblioteca de exportacao em PDF indisponivel.');
+      return;
+    }
+
+    const blocks = [];
+    const statsGrid = document.querySelector('.stats-grid');
+    if (statsGrid) blocks.push(statsGrid);
+    document.querySelectorAll('.mt-grid > section.card').forEach(card => {
+      const style = window.getComputedStyle(card);
+      if (style.display !== 'none' && style.visibility !== 'hidden') blocks.push(card);
+    });
+
+    if (!blocks.length) {
+      Toast.warning('Nao ha conteudo visivel para exportar.');
+      return;
+    }
+
+    setLoading(btn, true, 'Exportando...');
+    try {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const colGap = 6;
+      const contentW = pageW - margin * 2;
+      const colW = (contentW - colGap) / 2;
+      let y = margin;
+
+      pdf.setFontSize(13);
+      pdf.text('Dashboard Manutenção', margin, y);
+      y += 6;
+      pdf.setFontSize(9);
+      const periodo = activeDateFrom && activeDateTo
+        ? `${activeDateFrom} a ${activeDateTo}`
+        : (activeDateFrom || activeDateTo || 'Todos');
+      pdf.text(`Sistema: ${activeSistemaId || 'Todos'} | Centro: ${activeCentro || 'Todos'} | Período: ${periodo}`, margin, y);
+      y += 5.5;
+
+      const captureElement = async (el) => {
+        const canvas = await html2canvas(el, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          logging: false,
+          windowWidth: 1440,
+          windowHeight: 1024,
+          onclone: (doc) => {
+            const centros = doc.getElementById('mt-chart-centros');
+            if (centros) {
+              centros.style.maxWidth = 'none';
+              centros.style.width = 'auto';
+              centros.style.overflow = 'visible';
+            }
+            doc.querySelectorAll('.mt-vlegend-label, .mt-pie-label').forEach((elLabel) => {
+              elLabel.style.whiteSpace = 'normal';
+              elLabel.style.overflow = 'visible';
+              elLabel.style.textOverflow = 'clip';
+              elLabel.style.lineHeight = '1.25';
+            });
+            doc.querySelectorAll('.mt-vlegend-item, .mt-pie-item').forEach((elItem) => {
+              elItem.style.display = 'flex';
+              elItem.style.alignItems = 'center';
+              elItem.style.justifyContent = 'flex-start';
+              elItem.style.gap = '0.35rem';
+            });
+          },
+        });
+        return canvas;
+      };
+
+      const drawFullWidthBlock = async (el) => {
+        const canvas = await captureElement(el);
+        let imgW = contentW;
+        let imgH = (canvas.height * imgW) / canvas.width;
+        const maxH = pageH - margin - y;
+
+        if (imgH > maxH) {
+          pdf.addPage();
+          y = margin;
+        }
+
+        const pageMaxH = pageH - margin - y;
+        if (imgH > pageMaxH) {
+          const ratio = pageMaxH / imgH;
+          imgW *= ratio;
+          imgH *= ratio;
+        }
+
+        const x = margin + ((contentW - imgW) / 2);
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imgW, imgH, undefined, 'FAST');
+        y += imgH + 4;
+      };
+
+      const visibleCards = [...document.querySelectorAll('.mt-grid > section.card')]
+        .filter(card => {
+          const style = window.getComputedStyle(card);
+          return style.display !== 'none' && style.visibility !== 'hidden';
+        });
+
+      const rows = [];
+      let halfBuffer = [];
+      visibleCards.forEach(card => {
+        const isFull = card.classList.contains('mt-span-full');
+        if (isFull) {
+          if (halfBuffer.length) {
+            rows.push({ type: 'pair', items: halfBuffer });
+            halfBuffer = [];
+          }
+          rows.push({ type: 'full', items: [card] });
+          return;
+        }
+        halfBuffer.push(card);
+        if (halfBuffer.length === 2) {
+          rows.push({ type: 'pair', items: halfBuffer });
+          halfBuffer = [];
+        }
+      });
+      if (halfBuffer.length) {
+        rows.push({ type: 'pair', items: halfBuffer });
+      }
+
+      const statsGrid = document.querySelector('.stats-grid');
+      if (statsGrid) {
+        await drawFullWidthBlock(statsGrid);
+      }
+
+      for (const row of rows) {
+        if (row.type === 'full') {
+          await drawFullWidthBlock(row.items[0]);
+          continue;
+        }
+
+        const canvases = [];
+        for (const item of row.items) {
+          canvases.push(await captureElement(item));
+        }
+
+        const scaled = canvases.map(canvas => {
+          const imgW = colW;
+          const imgH = (canvas.height * imgW) / canvas.width;
+          return { canvas, imgW, imgH };
+        });
+
+        let rowH = Math.max(...scaled.map(s => s.imgH));
+        const rowAvailableH = pageH - margin - y;
+        if (rowH > rowAvailableH) {
+          pdf.addPage();
+          y = margin;
+          rowH = Math.max(...scaled.map(s => s.imgH));
+        }
+
+        const pageAvailableH = pageH - margin - y;
+        const rowScale = rowH > pageAvailableH ? (pageAvailableH / rowH) : 1;
+        const startX = margin;
+
+        scaled.forEach((s, idx) => {
+          const drawW = s.imgW * rowScale;
+          const drawH = s.imgH * rowScale;
+          const colX = startX + idx * (colW + colGap);
+          const x = colX + ((colW - drawW) / 2);
+          pdf.addImage(s.canvas.toDataURL('image/png'), 'PNG', x, y, drawW, drawH, undefined, 'FAST');
+        });
+
+        y += (rowH * rowScale) + 4;
+      }
+
+      pdf.save(makePdfFileName());
+      Toast.success('Exportacao em PDF concluida.');
+    } catch (_err) {
+      Toast.error('Nao foi possivel exportar o dashboard em PDF.');
+    } finally {
+      setLoading(btn, false, 'Exportar PDF');
+    }
+  }
+
+  async function loadDashboard(options = {}) {
+    const showFilterToast = Boolean(options && options.showFilterToast);
+    if (showFilterToast) Toast.warning('Carregando filtros...');
+    const params = {
+      sistema_id: activeSistemaId || undefined,
+      subsistema_id: activeSubsistemaId || undefined,
+      centro_trabalho: activeCentro || undefined,
+      data_inicio: activeDateFrom || undefined,
+      data_fim: activeDateTo || undefined,
+    };
+    const res = await API.manutencaoDashboard(params);
+    if (!res.ok) {
+      Toast.error((res.data && res.data.erro) || 'Nao foi possivel carregar dashboard de manutencao.');
+      return;
+    }
+
+    dashboardData = res.data || {};
+    updateFrotasVisibility();
+    updateCentrosContributionVisibility();
+    renderStats(dashboardData);
+    renderSidebarFilters(dashboardData);
+    renderCentrosMenu(dashboardData);
+    renderBarList('mt-chart-estacoes', dashboardData?.agregados?.estacoes_mais_afetadas);
+    if (shouldShowFrotasChart()) {
+      renderBarList('mt-chart-frotas', dashboardData?.agregados?.frotas_mais_afetadas);
+    } else {
+      const frotasEl = document.getElementById('mt-chart-frotas');
+      if (frotasEl) frotasEl.innerHTML = '';
+    }
+    renderBarList('mt-chart-locais', dashboardData?.agregados?.locais_mais_afetados);
+    renderBarList('mt-chart-sintomas', dashboardData?.agregados?.sintomas_mais_usados);
+    renderBarList('mt-chart-sistemas', dashboardData?.agregados?.sistemas);
+    renderBarList('mt-chart-subsistemas', dashboardData?.agregados?.subsistemas);
+    if (activeCentro) {
+      const centrosEl = document.getElementById('mt-chart-centros');
+      if (centrosEl) centrosEl.innerHTML = '';
+    } else {
+      renderPieChart('mt-chart-centros', dashboardData?.agregados?.contribuicao_centros);
+    }
+    setLastSync();
+    if (showFilterToast) Toast.success('Concluído');
+  }
+
+  function initDateRangePicker() {
+    const input = document.getElementById('mt-date-range-filter');
+    if (!input || typeof flatpickr !== 'function') return;
+    dateRangePicker = flatpickr(input, {
+      mode: 'range',
+      dateFormat: 'Y-m-d',
+      altInput: true,
+      altFormat: 'd/m/Y',
+      locale: (flatpickr && flatpickr.l10ns && flatpickr.l10ns.pt) ? flatpickr.l10ns.pt : 'default',
+      allowInput: false,
+      onChange: async function (selectedDates) {
+        const toIso = (d) => d instanceof Date ? d.toISOString().slice(0, 10) : '';
+        if (!selectedDates.length) {
+          activeDateFrom = '';
+          activeDateTo = '';
+          await loadDashboard();
+          return;
+        }
+        activeDateFrom = toIso(selectedDates[0]);
+        activeDateTo = selectedDates[1] ? toIso(selectedDates[1]) : '';
+        await loadDashboard();
+      },
+    });
+  }
+
+  initDateRangePicker();
+  window.addEventListener('resize', function () {
+    requestAnimationFrame(updateCentrosMenuLayout);
+  });
+  await loadDashboard();
+});
+</script>
+{% endblock %}

@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 {% endblock %}
 
 {% block toolbar_nav %}
@@ -29,6 +30,7 @@
     <button class="filter-tab" data-filter="APROVADA">Aprovadas</button>
     <button class="filter-tab" data-filter="DUPLICADA">Duplicadas</button>
     <button class="filter-tab" data-filter="CANCELADA">Canceladas</button>
+    <button class="btn btn-accent btn-sm" id="btn-export-ccm" type="button">Exportar Excel</button>
   </div>
 
   <!-- Equipment filter -->
@@ -1198,6 +1200,265 @@
     });
   }
 
+  const SISTEMA_NOME_MAP = {
+    '1': 'SISTEMA DE MATERIAL RODANTE',
+    '2': 'SISTEMA DE ENERGIA',
+    '3': 'SISTEMA DE REDE AÉREA',
+    '4': 'SISTEMA DE SINALIZAÇÃO',
+    '5': 'SISTEMA DE TELECOMUNICAÇÕES',
+    '6': 'SISTEMA DE VIA PERMANENTE',
+    '7': 'SISTEMA DE CIVIL',
+    '8': 'SISTEMA DE AUXILIARES',
+  };
+
+  function sistemaNomeSemNumero(rawValue) {
+    const txt = String(rawValue || '').trim();
+    if (!txt) return '';
+    return txt.replace(/^\s*\d+\s*-\s*/u, '').trim();
+  }
+
+  function resolverSistemaNome(item, sistemaId) {
+    const fromItem = sistemaNomeSemNumero(item?.sistema_nome || item?.sistema || '');
+    if (fromItem) return fromItem;
+    return SISTEMA_NOME_MAP[String(sistemaId || '').trim()] || '';
+  }
+
+  function moveHeaderAfter(headers, target, anchor) {
+    if (!headers.includes(target) || !headers.includes(anchor)) return headers;
+    if (target === anchor) return headers;
+    const withoutTarget = headers.filter(h => h !== target);
+    const anchorIndex = withoutTarget.indexOf(anchor);
+    if (anchorIndex < 0) return headers;
+    withoutTarget.splice(anchorIndex + 1, 0, target);
+    return withoutTarget;
+  }
+
+  const EXPORT_HEADER_ORDER = [
+    'id',
+    'ticket_saf',
+    'criado_data',
+    'criado_hora',
+    'notificador_nome',
+    'notificador_area',
+    'atualizado_sap',
+    'avaliado_por',
+    'data_avaliacao_data',
+    'data_avaliacao_hora',
+    'numero_ocorrencia',
+    'ccm_centro_trabalho',
+    'ccm_numero_nota',
+    'ccm_numero_ordem',
+    'ccm_texto_breve_nota',
+    'ccm_texto_longo_nota',
+    'data_inicio_avaria',
+    'hora_inicio_avaria',
+    'descricao_longa',
+    'equipamento',
+    'equipamento_id',
+    'km_final',
+    'km_inicial',
+    'local_instalacao',
+    'local_instalacao_id',
+    'motivo_cancelamento',
+    'motivo_devolucao',
+    'prioridade',
+    'qmnum_duplicata',
+    'saf_integracao_sap.aufnr',
+    'saf_integracao_sap.mensagem_erro',
+    'saf_integracao_sap.numero_ordem_sap',
+    'saf_integracao_sap.qmnum',
+    'saf_integracao_sap.status_integracao',
+    'saf_integracao_sap.texto_breve_nota',
+    'saf_integracao_sap.texto_longo_nota',
+    'saf_integracao_sap.tipo_nota',
+    'sintoma_id',
+    'sistema_id',
+    'sistema_nome',
+    'status',
+    'subsistema_id',
+    'subsistema',
+    'tipo_nota',
+    'titulo_falha',
+    'via_numero',
+    '_linha',
+    '_estacao',
+    '_data_notificacao',
+    '_numero_ocorrencia',
+    'saf_integracao_sap',
+    'anexo_evidencia_url',
+  ];
+
+  function flattenForExport(value, prefix = '', out = {}) {
+    if (value === null || value === undefined) {
+      out[prefix] = '';
+      return out;
+    }
+
+    if (Array.isArray(value)) {
+      out[prefix] = JSON.stringify(value);
+      return out;
+    }
+
+    if (typeof value === 'object') {
+      Object.entries(value).forEach(([key, nestedValue]) => {
+        const nestedPrefix = prefix ? `${prefix}.${key}` : key;
+        if (nestedValue && typeof nestedValue === 'object' && !Array.isArray(nestedValue)) {
+          flattenForExport(nestedValue, nestedPrefix, out);
+          return;
+        }
+        if (Array.isArray(nestedValue)) {
+          out[nestedPrefix] = JSON.stringify(nestedValue);
+          return;
+        }
+        out[nestedPrefix] = nestedValue ?? '';
+      });
+      return out;
+    }
+
+    out[prefix] = value;
+    return out;
+  }
+
+  function formatDateTimeInBrasilia(value) {
+    if (!value) return { date: '', time: '' };
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return { date: '', time: '' };
+
+    const parts = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(dt);
+
+    const pick = (type) => parts.find(p => p.type === type)?.value || '';
+    return {
+      date: `${pick('day')}/${pick('month')}/${pick('year')}`,
+      time: `${pick('hour')}:${pick('minute')}:${pick('second')}`,
+    };
+  }
+
+  function reorderExportHeaders(headers) {
+    const unique = [...new Set((headers || []).filter(Boolean))];
+    const ordered = EXPORT_HEADER_ORDER.filter(h => unique.includes(h));
+    unique.forEach(h => {
+      if (!ordered.includes(h)) ordered.push(h);
+    });
+    return ordered;
+  }
+
+  async function getExportRows(items) {
+    const rows = await Promise.all(items.map(async item => {
+      const criado = formatDateTimeInBrasilia(item.criado_em);
+      const avaliacao = formatDateTimeInBrasilia(item.data_avaliacao);
+      const avaliadoPorNome = String(
+        item.aprovador_nome || item.avaliado_por_nome || ''
+      ).trim();
+      const sistemaId = String(item.sistema_id || inferSistemaId(item) || '').trim();
+      const sistemaNome = resolverSistemaNome(item, sistemaId);
+      let subsistemaNome = String(item.subsistema || item.subsistema_nome || '').trim();
+      if (!subsistemaNome && sistemaId) {
+        const subsistema = await resolverSubsistemaPorContexto(item, sistemaId);
+        subsistemaNome = String(subsistema.nome || '').trim();
+      }
+
+      const base = {
+        id: item.id ?? '',
+        ticket_saf: item.ticket_saf ?? '',
+        criado_data: criado.date,
+        criado_hora: criado.time,
+        notificador_nome: item.notificador_nome ?? '',
+        notificador_area: item.notificador_area ?? '',
+        atualizado_sap: item.atualizado_sap ?? '',
+        avaliado_por: avaliadoPorNome,
+        data_avaliacao_data: avaliacao.date,
+        data_avaliacao_hora: avaliacao.time,
+        numero_ocorrencia: item.numero_ocorrencia ?? '',
+        ccm_centro_trabalho: item.ccm_centro_trabalho ?? '',
+        ccm_numero_nota: item.ccm_numero_nota ?? '',
+        ccm_numero_ordem: item.ccm_numero_ordem ?? '',
+        ccm_texto_breve_nota: item.ccm_texto_breve_nota ?? '',
+        ccm_texto_longo_nota: item.ccm_texto_longo_nota ?? '',
+        data_inicio_avaria: item.data_inicio_avaria ?? '',
+        hora_inicio_avaria: item.hora_inicio_avaria ?? '',
+        descricao_longa: item.descricao_longa ?? '',
+        equipamento: item.equipamento ?? '',
+        equipamento_id: item.equipamento_id ?? '',
+        km_final: item.km_final ?? '',
+        km_inicial: item.km_inicial ?? '',
+        local_instalacao: item.local_instalacao ?? '',
+        local_instalacao_id: item.local_instalacao_id ?? '',
+        motivo_cancelamento: item.motivo_cancelamento ?? '',
+        motivo_devolucao: item.motivo_devolucao ?? '',
+        prioridade: item.prioridade ?? '',
+        qmnum_duplicata: item.qmnum_duplicata ?? '',
+        saf_integracao_sap: item.saf_integracao_sap ?? '',
+        sintoma_id: item.sintoma_id ?? '',
+        sistema_id: sistemaId,
+        sistema_nome: sistemaNome,
+        status: item.status ?? '',
+        subsistema_id: item.subsistema_id ?? '',
+        subsistema: subsistemaNome,
+        tipo_nota: item.tipo_nota ?? '',
+        titulo_falha: item.titulo_falha ?? '',
+        via_numero: item.via_numero ?? '',
+        _linha: item._linha ?? '',
+        _estacao: item._estacao ?? '',
+        _data_notificacao: item._data_notificacao ?? '',
+        _numero_ocorrencia: item._numero_ocorrencia ?? '',
+        anexo_evidencia_url: item.anexo_evidencia_url ?? '',
+      };
+
+      const flattened = flattenForExport(base);
+
+      return Object.fromEntries(
+        Object.entries(flattened).map(([key, value]) => [key, value ?? ''])
+      );
+    }));
+    return rows;
+  }
+
+  function makeExportFileName() {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `fila_ccm_export_${stamp}.xlsx`;
+  }
+
+  async function exportFilteredQueueToExcel(triggerBtn) {
+    const items = ordenarItensFila(getFiltered());
+    if (!items.length) {
+      Toast.warning('Não há solicitacoes para exportar com os filtros atuais.');
+      return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+      Toast.error('Biblioteca de exportacao indisponivel. Recarregue a pagina e tente novamente.');
+      return;
+    }
+
+    setLoading(triggerBtn, true, 'Exportando...');
+    try {
+      const rows = await getExportRows(items);
+      const headers = reorderExportHeaders(
+        rows.flatMap(row => Object.keys(row))
+      );
+      const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Fila CCM');
+      XLSX.writeFile(workbook, makeExportFileName());
+      Toast.success(`Exportacao concluida (${rows.length} solicitações).`);
+    } catch (_err) {
+      Toast.error('Não foi possivel exportar a planilha.');
+    } finally {
+      setLoading(triggerBtn, false, 'Exportar Excel');
+    }
+  }
+
   // ───────── Render ─────────
   function renderQueue() {
     const container = document.getElementById('ccm-queue');
@@ -1565,7 +1826,7 @@
 
   function sanitizeSegment(value, fallback = 'N/I') {
     const txt = String(value || '').replace(/\s+/g, ' ').trim();
-    if (!txt || txt === '-' || txt.toUpperCase() === 'NAO INFORMADO') return fallback;
+    if (!txt || txt === '-' || txt.toUpperCase() === 'NãO INFORMADO') return fallback;
     return txt;
   }
 
@@ -1739,10 +2000,10 @@
   }
 
   async function resolverSubsistemaPorContexto(item, sistemaId) {
-    if (!sistemaId) return { id: '', codigo: '' };
+    if (!sistemaId) return { id: '', codigo: '', nome: '' };
 
     const lista = await listarSubsistemasPorSistemaCached(sistemaId);
-    if (!lista.length) return { id: '', codigo: '' };
+    if (!lista.length) return { id: '', codigo: '', nome: '' };
 
     const fromItem = String(item?.subsistema_id || '').trim();
     if (fromItem) {
@@ -1751,12 +2012,13 @@
         return {
           id: String(byId.id || '').trim(),
           codigo: String(byId.codigo || '').trim(),
+          nome: String(byId.nome || '').trim(),
         };
       }
     }
 
     const subsistemaTexto = readDescricaoCampo(item?.descricao_longa, 'Subsistema');
-    if (!subsistemaTexto) return { id: '', codigo: '' };
+    if (!subsistemaTexto) return { id: '', codigo: '', nome: '' };
 
     const textoNorm = normalizeKey(subsistemaTexto);
     const textoHead = normalizeKey(String(subsistemaTexto).split('-')[0]);
@@ -1769,8 +2031,8 @@
     });
 
     return match
-      ? { id: String(match.id || '').trim(), codigo: String(match.codigo || '').trim() }
-      : { id: '', codigo: '' };
+      ? { id: String(match.id || '').trim(), codigo: String(match.codigo || '').trim(), nome: String(match.nome || '').trim() }
+      : { id: '', codigo: '', nome: '' };
   }
 
   function contextoTextoBreve(item) {
@@ -2060,7 +2322,7 @@
     const sintomaSel = document.getElementById('aceite-sintoma');
     const sintomaId = sintomaSel?.value || '';
     const sintomaObj = sintomasModalCache.find(s => s.id === sintomaId);
-    const sintomaDescricao = sintomaObj?.descricao || 'Sintoma nao informado';
+    const sintomaDescricao = sintomaObj?.descricao || 'Sintoma não informado';
 
     const breve = document.getElementById('aceite-texto-breve');
     const longo = document.getElementById('aceite-texto-longo');
@@ -2086,7 +2348,7 @@
   async function mostrarAceite(id, options = {}) {
     const item = allSafs.find(s => String(s.id) === String(id));
     if (!item) {
-      Toast.error('SAF nao encontrada para aceite.');
+      Toast.error('SAF não encontrada para aceite.');
       return;
     }
 
@@ -2124,7 +2386,7 @@
     const user = Auth.getUser();
     const item = allSafs.find(s => String(s.id) === String(id));
     if (!item) {
-      Toast.error('SAF nao encontrada para gravacao.');
+      Toast.error('SAF não encontrada para gravação.');
       return;
     }
 
@@ -2278,7 +2540,7 @@
   function toggleDuplicadoGroup(groupKey) {
     const hasOpen = allSafs.some(s => s.status === 'ABERTA' && groupMatches(s, groupKey));
     if (!hasOpen) {
-      Toast.warning('Nao ha ordens abertas neste grupo.');
+      Toast.warning('Não há ordens abertas neste grupo.');
       return;
     }
 
@@ -2466,6 +2728,10 @@
       renderQueue();
     });
 
+    document.getElementById('btn-export-ccm')?.addEventListener('click', function () {
+      exportFilteredQueueToExcel(this);
+    });
+
     document.getElementById('btn-close-modal-aceite')?.addEventListener('click', fecharModalAceite);
     document.getElementById('btn-cancelar-modal-aceite')?.addEventListener('click', fecharModalAceite);
 
@@ -2484,28 +2750,28 @@
     document.getElementById('btn-copy-texto-breve')?.addEventListener('click', async function () {
       const valor = document.getElementById('aceite-texto-breve')?.value || '';
       if (!valor.trim()) {
-        Toast.warning('Nao ha texto breve para copiar.');
+        Toast.warning('Não há texto breve para copiar.');
         return;
       }
       try {
         await navigator.clipboard.writeText(valor);
         Toast.success('Texto breve copiado.');
       } catch (_err) {
-        Toast.error('Nao foi possivel copiar o texto breve.');
+        Toast.error('Não foi possivel copiar o texto breve.');
       }
     });
 
     document.getElementById('btn-copy-texto-longo')?.addEventListener('click', async function () {
       const valor = document.getElementById('aceite-texto-longo')?.value || '';
       if (!valor.trim()) {
-        Toast.warning('Nao ha texto longo para copiar.');
+        Toast.warning('Não há texto longo para copiar.');
         return;
       }
       try {
         await navigator.clipboard.writeText(valor);
         Toast.success('Texto longo copiado.');
       } catch (_err) {
-        Toast.error('Nao foi possivel copiar o texto longo.');
+        Toast.error('Não foi possivel copiar o texto longo.');
       }
     });
 

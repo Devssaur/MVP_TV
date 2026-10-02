@@ -7,7 +7,7 @@
 -- Comportamento:
 --   - Se sintomas_catalogo.id for uuid  -> cria sintoma_id uuid
 --   - Se sintomas_catalogo.id for bigint -> cria sintoma_id bigint
---   - Caso nao consiga detectar, cria sintoma_id text
+--   - Caso não consiga detectar, cria sintoma_id text
 --   - Tenta criar FK quando possivel
 --
 -- Script idempotente: seguro para reexecucao.

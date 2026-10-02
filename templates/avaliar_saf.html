@@ -165,7 +165,7 @@
           <div class="form-group mb-3">
             <label class="form-label" for="input-qmnum">Numero SAP (QMNUM) - opcional</label>
             <input id="input-qmnum" class="form-control" maxlength="30" placeholder="Ex: 100012345678">
-            <span class="form-hint">Se nao informado, a SAF fica aprovada aguardando registro manual do numero SAP.</span>
+            <span class="form-hint">Se não informado, a SAF fica aprovada aguardando registro manual do numero SAP.</span>
           </div>
           <div class="flex gap-2" style="justify-content:flex-end;">
             <button class="btn btn-outline" id="btn-cancelar-confirmar">Voltar</button>
@@ -390,7 +390,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
     ConfirmModal.show({
       title:        'Confirmar Aprovacao',
-      message:      'Ao confirmar, a SAF sera <strong>aprovada</strong>. O numero SAP pode ser registrado manualmente agora ou depois. Esta acao <strong>nao pode ser desfeita</strong>.',
+      message:      'Ao confirmar, a SAF sera <strong>aprovada</strong>. O numero SAP pode ser registrado manualmente agora ou depois. Esta acao <strong>não pode ser desfeita</strong>.',
       confirmText:  'Sim, Aprovar',
       confirmClass: 'btn-success',
       onConfirm: async () => {
@@ -413,7 +413,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         setLoading(btn, false, '\u2705 Confirmar Aprovacao');
 
         document.getElementById('res-qmnum').textContent = rAval.data.qmnum || 'Pendente';
-        document.getElementById('res-aufnr').textContent = 'Nao integrado';
+        document.getElementById('res-aufnr').textContent = 'Não integrado';
         document.getElementById('sap-result').classList.remove('hidden');
         document.getElementById('panel-confirmar').classList.add('hidden');
         document.getElementById('d-status').innerHTML = Fmt.statusBadge('APROVADA');

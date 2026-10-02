@@ -21,7 +21,7 @@ BEGIN
    LIMIT 1;
 
   IF v_type IS NULL THEN
-    RAISE NOTICE 'Coluna prioridade nao encontrada em saf_solicitacoes. Nada a fazer.';
+    RAISE NOTICE 'Coluna prioridade não encontrada em saf_solicitacoes. Nada a fazer.';
     RETURN;
   END IF;
 

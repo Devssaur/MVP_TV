@@ -54,12 +54,6 @@
     <button class="filter-tab" data-filter="APROVADA">
       Confirmadas <span class="fcount" id="fc-aprovada">0</span>
     </button>
-    <button class="filter-tab" data-filter="CANCELADA">
-      Canceladas <span class="fcount" id="fc-cancelada">0</span>
-    </button>
-    <button class="filter-tab" data-filter="DUPLICADA">
-      Duplicatas <span class="fcount" id="fc-duplicada">0</span>
-    </button>
   </div>
 
   <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:.65rem;">
@@ -186,27 +180,43 @@ document.addEventListener('DOMContentLoaded', async function () {
     return saf.status || 'ABERTA';
   }
 
+  function isOpenStatus(status) {
+    return status === 'ABERTA' || status === 'EM_ANALISE' || status === 'DEVOLVIDA';
+  }
+
   function updateCounters() {
     const counts = { ABERTA: 0, EM_ANALISE: 0, DEVOLVIDA: 0, APROVADA: 0, CANCELADA: 0, DUPLICADA: 0 };
     allSafs.forEach(s => { const st = getStatus(s); if (counts[st] !== undefined) counts[st]++; });
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+    const totalAbertas = counts.ABERTA + counts.EM_ANALISE + counts.DEVOLVIDA;
 
-    document.getElementById('stat-total').textContent     = allSafs.length;
-    document.getElementById('stat-abertas').textContent   = counts.ABERTA + counts.EM_ANALISE + counts.DEVOLVIDA;
-    document.getElementById('stat-devolvidas').textContent= counts.DEVOLVIDA;
-    document.getElementById('stat-aprovadas').textContent = counts.APROVADA;
-    document.getElementById('fc-todas').textContent       = allSafs.length;
-    document.getElementById('fc-aberta').textContent      = counts.ABERTA + counts.EM_ANALISE;
-    document.getElementById('fc-devolvida').textContent   = counts.DEVOLVIDA;
-    document.getElementById('fc-aprovada').textContent    = counts.APROVADA;
-    document.getElementById('fc-cancelada').textContent   = counts.CANCELADA;
-    document.getElementById('fc-duplicada').textContent   = counts.DUPLICADA;
+    setText('stat-total', allSafs.length);
+    setText('stat-abertas', totalAbertas);
+    setText('stat-devolvidas', counts.DEVOLVIDA);
+    setText('stat-aprovadas', counts.APROVADA);
+    setText('fc-todas', allSafs.length);
+    setText('fc-aberta', counts.ABERTA + counts.EM_ANALISE);
+    setText('fc-devolvida', counts.DEVOLVIDA);
+    setText('fc-aprovada', counts.APROVADA);
   }
 
   // ── Render table ──────────────────────────────────
   function renderTable(filter) {
-    let filtered = filter === 'TODAS'
-      ? allSafs
-      : allSafs.filter(s => getStatus(s) === filter);
+    let filtered = allSafs;
+
+    if (filter === 'ABERTA') {
+      filtered = filtered.filter(s => {
+        const st = getStatus(s);
+        return st === 'ABERTA' || st === 'EM_ANALISE';
+      });
+    } else if (filter === 'DEVOLVIDA') {
+      filtered = filtered.filter(s => getStatus(s) === 'DEVOLVIDA');
+    } else if (filter === 'APROVADA') {
+      filtered = filtered.filter(s => getStatus(s) === 'APROVADA');
+    }
 
     if (activeOccurrenceSearch) {
       const q = activeOccurrenceSearch.trim().toLowerCase();

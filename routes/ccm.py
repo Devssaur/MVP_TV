@@ -45,13 +45,13 @@ class AvaliarSafPayload(BaseModel):
 
 
 def _erro_interno_padrao():
-    return jsonify({'erro': 'Nao foi possivel processar sua solicitacao. Tente novamente.'}), 500
+    return jsonify({'erro': 'Não foi possivel processar sua solicitacao. Tente novamente.'}), 500
 
 def _get_supabase_client() -> Client:
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
     if not url or not key:
-        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.")
+        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY não configuradas.")
     return create_client(url, key)
 
 
@@ -492,7 +492,7 @@ def avaliar_saf(solicitacao_id):
                 }).execute()
 
             except Exception as sap_err:
-                erro_sap = 'Nao foi possivel registrar os dados de integracao.'
+                erro_sap = 'Não foi possivel registrar os dados de integracao.'
                 logger.error('Falha ao registrar integracao manual (saf_id=%s): %s', solicitacao_id, sap_err)
 
             resposta = {
@@ -585,7 +585,7 @@ def avaliar_saf(solicitacao_id):
                             len(duplicatas_ids), qmnum_manual, duplicatas_ids,
                         )
                 except Exception:
-                    logger.exception('Erro ao marcar duplicatas (nao bloqueante)')
+                    logger.exception('Erro ao marcar duplicatas (não bloqueante)')
 
             resposta["duplicatas"] = len(duplicatas_ids)
             return jsonify(resposta), 200
@@ -596,10 +596,10 @@ def avaliar_saf(solicitacao_id):
         return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.', 'request_id': request_id}), 401
     except PostgrestAPIError:
         logger.exception('[AVALIAR_SAF][%s] Erro de dados Supabase ao avaliar SAF id=%s', request_id, solicitacao_id)
-        return jsonify({'erro': 'Nao foi possivel salvar os dados da avaliacao.', 'request_id': request_id}), 500
+        return jsonify({'erro': 'Não foi possivel salvar os dados da avaliacao.', 'request_id': request_id}), 500
     except Exception:
         logger.exception('[AVALIAR_SAF][%s] Erro interno ao avaliar SAF id=%s', request_id, solicitacao_id)
-        return jsonify({'erro': 'Nao foi possivel processar sua solicitacao. Tente novamente.', 'request_id': request_id}), 500
+        return jsonify({'erro': 'Não foi possivel processar sua solicitacao. Tente novamente.', 'request_id': request_id}), 500
 
 
 # ==========================================
@@ -625,7 +625,7 @@ def atualizar_prioridade_ccm(solicitacao_id):
         return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
     except PostgrestAPIError:
         logger.exception('Erro de dados Supabase ao atualizar prioridade id=%s', solicitacao_id)
-        return jsonify({'erro': 'Nao foi possivel salvar os dados da prioridade.'}), 500
+        return jsonify({'erro': 'Não foi possivel salvar os dados da prioridade.'}), 500
     except Exception:
         logger.exception('Erro interno ao atualizar prioridade id=%s', solicitacao_id)
         return _erro_interno_padrao()
@@ -703,7 +703,7 @@ def duplicar_lote_ccm():
         return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
     except PostgrestAPIError:
         logger.exception('Erro de dados Supabase no lote de duplicadas')
-        return jsonify({'erro': 'Nao foi possivel salvar os dados do lote.'}), 500
+        return jsonify({'erro': 'Não foi possivel salvar os dados do lote.'}), 500
     except Exception:
         logger.exception('Erro interno no lote de duplicadas')
         return _erro_interno_padrao()
@@ -729,7 +729,7 @@ def toggle_sap(solicitacao_id):
         return jsonify({'erro': 'Falha de autenticacao ao processar a solicitacao.'}), 401
     except PostgrestAPIError:
         logger.exception('Erro de dados Supabase ao alternar flag SAP id=%s', solicitacao_id)
-        return jsonify({'erro': 'Nao foi possivel salvar os dados da atualizacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel salvar os dados da atualizacao.'}), 500
     except Exception:
         logger.exception('Erro interno ao alternar flag SAP id=%s', solicitacao_id)
         return _erro_interno_padrao()

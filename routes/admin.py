@@ -18,11 +18,11 @@ admin_bp = Blueprint("admin_bp", __name__)
 logger = logging.getLogger(__name__)
 
 
-VALID_PROFILES = ("Solicitante", "CCM", "Administrador", "SIC")
+VALID_PROFILES = ("Solicitante", "CCM", "Administrador", "SIC", "Manutenção")
 
 
 def _is_auth_user_not_found(error: Exception) -> bool:
-    """Detecta erro idempotente de exclusao quando o usuario ja nao existe no Auth."""
+    """Detecta erro idempotente de exclusao quando o usuario ja não existe no Auth."""
     status_code = getattr(error, "status", None) or getattr(error, "status_code", None)
     if status_code == 404:
         return True
@@ -39,6 +39,8 @@ def _normalize_profile(perfil: str | None) -> str:
         "ADMIN": "Administrador",
         "ADMINISTRADOR": "Administrador",
         "SIC": "SIC",
+        "MANUTENCAO": "Manutenção",
+        "MANUTENÇÃO": "Manutenção",
     }
     return mapa.get(perfil_normalizado.upper(), perfil_normalizado)
 
@@ -54,7 +56,7 @@ def _get_supabase_client() -> Client:
         # Operações admin usam a service_role key para bypasser RLS
         supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
         if not supabase_url or not supabase_key:
-            raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.")
+            raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY não configuradas.")
         _supabase_client = create_client(supabase_url, supabase_key)
     return _supabase_client
 
@@ -97,10 +99,10 @@ def listar_logs():
     except AuthApiError:
         return jsonify({'erro': 'Falha de autenticacao ao consultar logs.'}), 401
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel consultar os logs.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os logs.'}), 500
     except Exception:
         logger.exception('Erro interno ao listar logs')
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios", methods=["GET"])
@@ -118,10 +120,10 @@ def listar_usuarios():
     except AuthApiError:
         return jsonify({'erro': 'Falha de autenticacao ao consultar usuarios.'}), 401
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel consultar os usuarios.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os usuarios.'}), 500
     except Exception:
         logger.exception('Erro interno ao listar usuarios')
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>/aprovar", methods=["POST"])
@@ -174,10 +176,10 @@ def aprovar_usuario(usuario_id):
     except AuthApiError:
         return jsonify({'erro': 'Falha de autenticacao ao atualizar usuario.'}), 401
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel atualizar os dados do usuario.'}), 500
+        return jsonify({'erro': 'Não foi possivel atualizar os dados do usuario.'}), 500
     except Exception:
         logger.exception('Erro interno ao aprovar usuario id=%s', usuario_id)
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>/perfil", methods=["PUT"])
@@ -200,7 +202,8 @@ def alterar_perfil(usuario_id):
             "Solicitante": "SOLICITANTE",
             "CCM": "CCM",
             "Administrador": "ADMIN",
-            "SIC": "SIC"
+            "SIC": "SIC",
+            "Manutenção": "MANUTENCAO",
         }
         usando_como_val = map_usando_como.get(perfil)
 
@@ -240,10 +243,10 @@ def alterar_perfil(usuario_id):
     except AuthApiError:
         return jsonify({'erro': 'Falha de autenticacao ao alterar perfil.'}), 401
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel salvar o novo perfil.'}), 500
+        return jsonify({'erro': 'Não foi possivel salvar o novo perfil.'}), 500
     except Exception:
         logger.exception('Erro interno ao alterar perfil usuario id=%s', usuario_id)
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>", methods=["PUT"])
@@ -276,7 +279,8 @@ def editar_usuario(usuario_id):
             "Solicitante": "SOLICITANTE",
             "CCM": "CCM",
             "Administrador": "ADMIN",
-            "SIC": "SIC"
+            "SIC": "SIC",
+            "Manutenção": "MANUTENCAO",
         }
         usando_como_val = map_usando_como.get(perfil)
 
@@ -321,10 +325,10 @@ def editar_usuario(usuario_id):
     except AuthApiError:
         return jsonify({'erro': 'Falha de autenticacao ao editar usuario.'}), 401
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel salvar os dados do usuario.'}), 500
+        return jsonify({'erro': 'Não foi possivel salvar os dados do usuario.'}), 500
     except Exception:
         logger.exception('Erro interno ao editar usuario id=%s', usuario_id)
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
 
 @admin_bp.route("/usuarios/<usuario_id>", methods=["DELETE"])
@@ -334,7 +338,7 @@ def excluir_usuario(usuario_id):
     ator_id = get_current_user_context().get('id')
 
     if ator_id and usuario_id == ator_id:
-        return jsonify({'erro': 'Nao e permitido excluir o proprio usuario enquanto logado.'}), 400
+        return jsonify({'erro': 'Não e permitido excluir o proprio usuario enquanto logado.'}), 400
 
     try:
         supabase = _get_supabase_client()
@@ -342,7 +346,7 @@ def excluir_usuario(usuario_id):
         if not antes_sel.data:
             return jsonify({"erro": "Usuário não encontrado."}), 404
 
-        # Remove do Auth. Se ja nao existir no Auth, trata como idempotente e segue limpeza local.
+        # Remove do Auth. Se ja não existir no Auth, trata como idempotente e segue limpeza local.
         try:
             supabase.auth.admin.delete_user(usuario_id)
         except AuthApiError as exc:
@@ -373,9 +377,9 @@ def excluir_usuario(usuario_id):
         return jsonify({"mensagem": "Usuário excluído com sucesso."}), 200
     except AuthApiError:
         logger.exception('Falha no provedor de autenticacao ao excluir usuario id=%s', usuario_id)
-        return jsonify({'erro': 'Nao foi possivel excluir o usuario no provedor de autenticacao.'}), 502
+        return jsonify({'erro': 'Não foi possivel excluir o usuario no provedor de autenticacao.'}), 502
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel excluir o usuario.'}), 500
+        return jsonify({'erro': 'Não foi possivel excluir o usuario.'}), 500
     except Exception:
         logger.exception('Erro interno ao excluir usuario id=%s', usuario_id)
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500

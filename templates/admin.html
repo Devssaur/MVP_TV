@@ -145,6 +145,7 @@
             <option value="Solicitante">Solicitante</option>
             <option value="CCM">CCM</option>
             <option value="SIC">SIC</option>
+            <option value="Manutenção">Manutenção</option>
             <option value="Administrador">Administrador</option>
           </select>
         </div>
@@ -184,7 +185,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   const syncAdminMode = await API.atualizarModoVisualizacao('ADMIN');
   if (!syncAdminMode.ok) {
-    Toast.error((syncAdminMode.data && syncAdminMode.data.erro) || 'Nao foi possivel validar acesso administrativo.');
+    Toast.error((syncAdminMode.data && syncAdminMode.data.erro) || 'Não foi possivel validar acesso administrativo.');
     return;
   }
 
@@ -221,6 +222,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         <option value="Solicitante" ${usuario.perfil==='Solicitante'?'selected':''}>Solicitante</option>
         <option value="CCM" ${usuario.perfil==='CCM'?'selected':''}>CCM</option>
         <option value="SIC" ${usuario.perfil==='SIC'?'selected':''}>SIC</option>
+        <option value="Manutenção" ${usuario.perfil==='Manutenção'?'selected':''}>Manutenção</option>
         <option value="Administrador" ${usuario.perfil==='Administrador'?'selected':''}>Administrador</option>
       </select>`;
   }
@@ -516,7 +518,7 @@ function confirmarExclusaoUsuario(id) {
   const nome = usuario && usuario.nome ? usuario.nome : 'este usuário';
 
   if (id === _adminId()) {
-    Toast.warning('Voce nao pode excluir seu proprio usuario enquanto estiver logado.');
+    Toast.warning('Voce não pode excluir seu proprio usuario enquanto estiver logado.');
     return;
   }
 

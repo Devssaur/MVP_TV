@@ -1701,7 +1701,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const res = await API.buscarSaf(editSafId);
     if (!res.ok) {
-      Toast.error(res.data?.erro || 'Nao foi possivel carregar a SAF para edicao.');
+      Toast.error(res.data?.erro || 'Não foi possivel carregar a SAF para edicao.');
       setTimeout(() => { window.location.href = '/minhassafs'; }, 1400);
       return;
     }
