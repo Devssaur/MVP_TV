@@ -18,6 +18,8 @@ def _normalize_profile(value: str | None) -> str:
         'SOLICITANTE': 'SOLICITANTE',
         'CCM': 'CCM',
         'SIC': 'SIC',
+        'MANUTENCAO': 'MANUTENCAO',
+        'MANUTENÇÃO': 'MANUTENCAO',
     }
     return aliases.get(normalized, normalized)
 
@@ -30,7 +32,7 @@ def _get_public_supabase_client() -> Client:
     url = os.getenv('SUPABASE_URL')
     key = os.getenv('SUPABASE_KEY')
     if not url or not key:
-        raise RuntimeError('Variaveis SUPABASE_URL e SUPABASE_KEY nao configuradas.')
+        raise RuntimeError('Variaveis SUPABASE_URL e SUPABASE_KEY não configuradas.')
     return create_client(url, key)
 
 
@@ -38,7 +40,7 @@ def _get_service_supabase_client() -> Client:
     url = os.getenv('SUPABASE_URL')
     key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
     if not url or not key:
-        raise RuntimeError('Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.')
+        raise RuntimeError('Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY não configuradas.')
     return create_client(url, key)
 
 
@@ -92,7 +94,7 @@ def get_current_user_context() -> dict[str, Any]:
         raise AuthzError('Falha ao validar usuario autenticado.') from exc
     perfil_data = perfil_resp.data or {}
     if not perfil_data:
-        raise AuthzError('Usuario nao encontrado.')
+        raise AuthzError('Usuario não encontrado.')
     if not perfil_data.get('aprovado'):
         raise AuthzError('Acesso pendente. Aguarde aprovacao do administrador.')
 

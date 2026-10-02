@@ -16,7 +16,7 @@ ALTER TABLE public.saf_solicitacoes
   ADD COLUMN IF NOT EXISTS km_inicial varchar(5),
   ADD COLUMN IF NOT EXISTS km_final varchar(5);
 
--- 2) Constraints de formato (somente se ainda nao existirem)
+-- 2) Constraints de formato (somente se ainda não existirem)
 DO $$
 BEGIN
   IF NOT EXISTS (

@@ -124,12 +124,12 @@ def _format_long_text_sap(saf: dict) -> str:
         or saf.get("ocorrencia_numero")
         or saf.get("id_ocorrencia")
         or saf.get("id")
-        or "NAO INFORMADO"
+        or "NÃO INFORMADO"
     )
 
     linhas = [
-        f"Numero da SAF: {numero_saf or 'NAO INFORMADO'}",
-        f"Numero da Ocorrencia: {numero_ocorrencia}",
+        f"Numero da SAF: {numero_saf or 'NÃO INFORMADO'}",
+        f"Numero da Ocorrencia: {numero_ocorrencia or 'NÃO INFORMADO'}",
         "Criador sistemico: S-SIGO-TRIVIA",
     ]
 

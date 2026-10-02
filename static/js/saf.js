@@ -9,8 +9,9 @@ function normalizeProfile(profile) {
 
 function getAllowedViewModes(profile) {
   const normalizedProfile = normalizeProfile(profile);
-  if (normalizedProfile === 'ADMIN') return ['SOLICITANTE', 'CCM', 'SIC', 'ADMIN'];
+  if (normalizedProfile === 'ADMIN') return ['SOLICITANTE', 'CCM', 'SIC', 'ADMIN', 'MANUTENCAO'];
   if (normalizedProfile === 'CCM') return ['SOLICITANTE', 'CCM', 'SIC'];
+  if (normalizedProfile === 'MANUTENCAO') return ['MANUTENCAO'];
   return [normalizedProfile || 'SOLICITANTE'];
 }
 
@@ -81,7 +82,7 @@ const Auth = (() => {
       return;
     }
     const mode = getCurrentMode(user);
-    const dest = { SOLICITANTE: '/novasaf', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
+    const dest = { SOLICITANTE: '/novasaf', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic', MANUTENCAO: '/manutencao' };
     window.location.href = dest[mode] || '/novasaf';
   }
 
@@ -224,6 +225,14 @@ const API = (() => {
     },
     sintomas:     (eid)  => request('GET', `/dados/sintomas/${eid}`),
     centrosTrabalho: ()  => request('GET', '/dados/centros-trabalho'),
+    manutencaoDashboard: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => {
+        if (v != null && String(v) !== '') qs.set(k, String(v));
+      });
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return request('GET', `/manutencao/dashboard${suffix}`);
+    },
 
     // Admin
     logs:             ()               => request('GET',  '/admin/logs'),
@@ -387,7 +396,7 @@ function setupToolbar() {
 
   const perfil = document.getElementById('toolbar-perfil');
   if (perfil) {
-    const labels = { SOLICITANTE: 'Solicitante', CCM: 'CCM', ADMIN: 'Administrador', SIC: 'SIC' };
+    const labels = { SOLICITANTE: 'Solicitante', CCM: 'CCM', ADMIN: 'Administrador', SIC: 'SIC', MANUTENCAO: 'Manutenção' };
     const mode = getCurrentMode(user);
     perfil.textContent = labels[mode] || user.perfil;
   }
@@ -434,6 +443,9 @@ function _setupSidebar(user) {
     SIC: [
       { href: '/chamados-sic', label: 'Chamados SIC', icon: '&#128202;' },
     ],
+    MANUTENCAO: [
+      { href: '/manutencao', label: 'Manutenção', icon: '&#128202;' },
+    ],
     ADMIN: [
       { href: '/admin', label: 'Administração', icon: '&#9881;' },
     ],
@@ -477,7 +489,7 @@ function _setupSidebar(user) {
       }
     });
 
-    const DEST = { SOLICITANTE: '/minhassafs', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic' };
+    const DEST = { SOLICITANTE: '/minhassafs', CCM: '/filaccm', ADMIN: '/admin', SIC: '/chamados-sic', MANUTENCAO: '/manutencao' };
     devSelect.value = getCurrentMode(user);
     devSelect.title = 'Trocar a visualização atual do sistema';
     devSelect.onchange = async function () {
@@ -491,7 +503,7 @@ function _setupSidebar(user) {
 
       if (!res.ok) {
         this.value = previousMode;
-        Toast.error((res.data && res.data.erro) || 'Nao foi possivel trocar a visualizacao.');
+        Toast.error((res.data && res.data.erro) || 'Não foi possivel trocar a visualizacao.');
         return;
       }
 

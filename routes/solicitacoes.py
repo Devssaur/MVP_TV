@@ -79,7 +79,7 @@ class CancelarSafPayload(BaseModel):
     motivo_cancelamento: str = Field(min_length=3, max_length=1000)
 
 
-def _erro_interno(msg: str = 'Nao foi possivel processar sua solicitacao.'):
+def _erro_interno(msg: str = 'Não foi possivel processar sua solicitacao.'):
     return jsonify({'erro': msg}), 500
 
 
@@ -89,7 +89,7 @@ def _get_supabase_client() -> Client:
     supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
 
     if not supabase_url or not supabase_key:
-        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY nao configuradas.")
+        raise RuntimeError("Variaveis SUPABASE_URL e SUPABASE_SERVICE_KEY não configuradas.")
 
     return create_client(supabase_url, supabase_key)
 
@@ -119,7 +119,7 @@ def listar_minhas_solicitacoes(notificador_id):
         return jsonify({"solicitacoes": result.data, "total": len(result.data)}), 200
     except (AuthApiError, PostgrestAPIError):
         current_app.logger.exception('Erro Supabase ao listar solicitacoes do usuario=%s', notificador_id)
-        return _erro_interno('Nao foi possivel consultar suas solicitacoes.')
+        return _erro_interno('Não foi possivel consultar suas solicitacoes.')
     except Exception:
         current_app.logger.exception('Erro interno ao listar solicitacoes do usuario=%s', notificador_id)
         return _erro_interno()
@@ -154,7 +154,7 @@ def listar_minhas_safs(usuario_id):
 
     except (AuthApiError, PostgrestAPIError):
         current_app.logger.exception('Erro Supabase ao listar SAFs do usuario=%s', usuario_id)
-        return _erro_interno('Nao foi possivel consultar suas SAFs.')
+        return _erro_interno('Não foi possivel consultar suas SAFs.')
     except Exception:
         current_app.logger.exception('Erro interno ao listar SAFs do usuario=%s', usuario_id)
         return _erro_interno()
@@ -183,7 +183,7 @@ def listar_notificacoes_sic():
         return jsonify({"solicitacoes": result.data, "total": len(result.data)}), 200
     except (AuthApiError, PostgrestAPIError):
         current_app.logger.exception('Erro Supabase ao listar notificacoes SIC')
-        return _erro_interno('Nao foi possivel consultar as notificacoes.')
+        return _erro_interno('Não foi possivel consultar as notificacoes.')
     except Exception:
         current_app.logger.exception('Erro interno ao listar notificacoes SIC')
         return _erro_interno()
@@ -216,7 +216,7 @@ def buscar_saf(saf_id: str):
         )
         saf = resp.data
         if not saf:
-            return jsonify({'erro': 'SAF nao encontrada.'}), 404
+            return jsonify({'erro': 'SAF não encontrada.'}), 404
 
         if user.get('perfil') == 'Solicitante' and user.get('id') != saf.get('notificador_id'):
             return jsonify({'erro': 'Acesso negado para este recurso.'}), 403
@@ -224,7 +224,7 @@ def buscar_saf(saf_id: str):
         return jsonify({'solicitacao': saf}), 200
     except (AuthApiError, PostgrestAPIError):
         current_app.logger.exception('Erro Supabase ao buscar SAF id=%s', saf_id)
-        return _erro_interno('Nao foi possivel consultar a SAF.')
+        return _erro_interno('Não foi possivel consultar a SAF.')
     except Exception:
         current_app.logger.exception('Erro interno ao buscar SAF id=%s', saf_id)
         return _erro_interno()
@@ -258,7 +258,7 @@ def atualizar_saf(saf_id: str):
             .execute()
         ).data
         if not atual:
-            return jsonify({'erro': 'SAF nao encontrada.'}), 404
+            return jsonify({'erro': 'SAF não encontrada.'}), 404
 
         if user.get('perfil') == 'Solicitante' and user.get('id') != atual.get('notificador_id'):
             return jsonify({'erro': 'Acesso negado para este recurso.'}), 403
@@ -281,7 +281,7 @@ def atualizar_saf(saf_id: str):
             campos['prioridade'] = prioridade
 
         # Compatibilidade de tipos: algumas fontes retornam UUID para campos bigint.
-        # Mantemos valor anterior quando o novo valor nao for numerico.
+        # Mantemos valor anterior quando o novo valor não for numerico.
         for campo_id in ('sistema_id', 'subsistema_id'):
             if campo_id not in campos:
                 continue
@@ -357,7 +357,7 @@ def atualizar_saf(saf_id: str):
         return jsonify({'mensagem': 'SAF atualizada com sucesso.'}), 200
     except (AuthApiError, PostgrestAPIError):
         current_app.logger.exception('Erro Supabase ao atualizar SAF id=%s', saf_id)
-        return _erro_interno('Nao foi possivel atualizar a SAF.')
+        return _erro_interno('Não foi possivel atualizar a SAF.')
     except Exception:
         current_app.logger.exception('Erro interno ao atualizar SAF id=%s', saf_id)
         return _erro_interno()
@@ -388,13 +388,13 @@ def cancelar_saf(saf_id: str):
         )
         saf = resp.data
         if not saf:
-            return jsonify({'erro': 'SAF nao encontrada.'}), 404
+            return jsonify({'erro': 'SAF não encontrada.'}), 404
 
         if user.get('perfil') == 'Solicitante' and user.get('id') != saf.get('notificador_id'):
             return jsonify({'erro': 'Acesso negado para este recurso.'}), 403
 
         if saf.get('status') in ('CANCELADA', 'APROVADA'):
-            return jsonify({'erro': 'Esta SAF nao pode ser cancelada no status atual.'}), 400
+            return jsonify({'erro': 'Esta SAF não pode ser cancelada no status atual.'}), 400
 
         integracao = (saf.get('saf_integracao_sap') or [])
         integ = integracao[0] if integracao else {}
@@ -415,7 +415,7 @@ def cancelar_saf(saf_id: str):
         return jsonify({'mensagem': 'SAF cancelada com sucesso.'}), 200
     except (AuthApiError, PostgrestAPIError):
         current_app.logger.exception('Erro Supabase ao cancelar SAF id=%s', saf_id)
-        return _erro_interno('Nao foi possivel cancelar a SAF.')
+        return _erro_interno('Não foi possivel cancelar a SAF.')
     except Exception:
         current_app.logger.exception('Erro interno ao cancelar SAF id=%s', saf_id)
         return _erro_interno()
@@ -685,7 +685,7 @@ def criar_saf():
                     and isinstance(insert_payload.get("prioridade"), str)
                 ):
                     current_app.logger.warning(
-                        "[CRIAR_SAF][%s] tentativa=%s prioridade em texto nao aceita; retry com mapeamento inteiro",
+                        "[CRIAR_SAF][%s] tentativa=%s prioridade em texto não aceita; retry com mapeamento inteiro",
                         request_id,
                         tentativa + 1,
                     )
@@ -742,12 +742,12 @@ def criar_saf():
                 )
             except Exception:
                 current_app.logger.exception(
-                    "[CRIAR_SAF][%s] etapa=upload_foto falhou (nao bloqueante)",
+                    "[CRIAR_SAF][%s] etapa=upload_foto falhou (não bloqueante)",
                     request_id,
                 )
                 # Falha no upload não deve bloquear a criação da SAF
 
-        # 4. Registra auditoria (best-effort para nao quebrar a criacao da SAF)
+        # 4. Registra auditoria (best-effort para não quebrar a criacao da SAF)
         try:
             supabase.table("logs_auditoria").insert(
                 {
@@ -763,7 +763,7 @@ def criar_saf():
             ).execute()
         except Exception:
             current_app.logger.exception(
-                "[CRIAR_SAF][%s] etapa=auditoria falhou (nao bloqueante)",
+                "[CRIAR_SAF][%s] etapa=auditoria falhou (não bloqueante)",
                 request_id,
             )
 
@@ -783,7 +783,7 @@ def criar_saf():
 
     except (AuthApiError, PostgrestAPIError):
         current_app.logger.exception('[CRIAR_SAF][%s] erro de dados/autenticacao Supabase', request_id)
-        return jsonify({'erro': 'Nao foi possivel salvar seus dados. Tente novamente.', 'request_id': request_id}), 500
+        return jsonify({'erro': 'Não foi possivel salvar seus dados. Tente novamente.', 'request_id': request_id}), 500
     except Exception:
         current_app.logger.exception('[CRIAR_SAF][%s] erro interno', request_id)
         return jsonify({'erro': 'Erro ao criar SAF. Tente novamente.', 'request_id': request_id}), 500

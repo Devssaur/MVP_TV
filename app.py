@@ -17,6 +17,7 @@ from routes.solicitacoes import solicitacoes_bp
 from routes.dados_mestres import dados_bp
 from routes.ccm import ccm_bp
 from routes.admin import admin_bp
+from routes.manutencao import manutencao_bp
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -48,6 +49,7 @@ app.register_blueprint(solicitacoes_bp,  url_prefix='/api/solicitacoes')
 app.register_blueprint(dados_bp,         url_prefix='/api/dados')
 app.register_blueprint(ccm_bp,           url_prefix='/api/ccm')
 app.register_blueprint(admin_bp,         url_prefix='/api/admin')
+app.register_blueprint(manutencao_bp,    url_prefix='/api/manutencao')
 
 # ── Rotas de Front-end (SPA com Jinja2) ───────────────────
 @app.route('/')
@@ -85,6 +87,10 @@ def fila_ccm():
 @app.route('/chamados-sic')
 def chamados_sic():
     return render_template('chamados_sic.html')
+
+@app.route('/manutencao')
+def manutencao_dashboard():
+    return render_template('manutencao.html')
 
 @app.route('/avaliar-saf/<saf_id>')
 def avaliar_saf(saf_id):

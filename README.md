@@ -48,6 +48,8 @@ Crie o arquivo `.env` na raiz do projeto:
 ```env
 SUPABASE_URL=https://<seu-projeto>.supabase.co
 SUPABASE_KEY=<sua-chave-anon>
+SUPABASE_ANON_KEY=<opcional: alias da chave anon>
+SUPABASE_SERVICE_KEY=<opcional: usada em operações administrativas>
 ```
 
 ---
@@ -60,6 +62,9 @@ Execute os scripts na ordem abaixo no **SQL Editor** do Supabase:
 |---|---|
 | `database/schema_saf.sql` | Criação das tabelas, índices e triggers |
 | `database/policies_rls.sql` | Políticas de segurança RLS |
+| `database/migrations/add_aprovado_usuarios.sql` | Adiciona aprovação/cadastro automático de usuário via `auth.users` |
+| `database/migrations/add_usando_como_usuarios.sql` | Adiciona coluna de modo de visualização (`usando_como`) |
+| `database/migrations/add_manutencao_perfil_usuarios.sql` | Habilita perfil `Manutenção` e modo `MANUTENCAO` |
 | `database/seed_usuarios.sql` | Usuários de teste |
 
 ---
@@ -164,6 +169,7 @@ Acesse: `http://127.0.0.1:5000/`
 |---|---|
 | `SOLICITANTE` | Cria, edita (se devolvida) e cancela SAFs (sem ordem SAP) |
 | `CCM` | Avalia SAFs: Aprovar, Devolver ou Cancelar |
+| `MANUTENCAO` | Dashboard operacional com visão de SAFs aprovadas por sistema/centro |
 | `ADMIN` | Acesso a logs de auditoria e configurações |
 
 ---
@@ -186,4 +192,3 @@ MVP_TV/
     ├── ccm.py              # Triagem CCM
     └── dados_mestres.py    # Cache de dados SAP
 ```
-

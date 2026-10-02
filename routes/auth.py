@@ -1,4 +1,5 @@
 import os
+import logging
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 from supabase import Client, create_client
@@ -22,6 +23,7 @@ except Exception:  # pragma: no cover
 load_dotenv()
 
 auth_bp = Blueprint("auth_bp", __name__)
+logger = logging.getLogger(__name__)
 
 
 class CadastroPayload(BaseModel):
@@ -68,6 +70,8 @@ def _to_app_profile(db_perfil: str) -> str:
         "CCM": "CCM",
         "Administrador": "ADMIN",
         "SIC": "SIC",
+        "Manutenção": "MANUTENCAO",
+        "Manutencao": "MANUTENCAO",
     }
     return mapa.get(db_perfil, db_perfil)
 
@@ -117,6 +121,8 @@ def _to_db_profile(app_perfil: str) -> str:
         "CCM": "CCM",
         "ADMIN": "Administrador",
         "SIC": "SIC",
+        "MANUTENCAO": "Manutenção",
+        "MANUTENÇÃO": "Manutenção",
     }
     return mapa.get(app_perfil, app_perfil)
 
@@ -129,26 +135,101 @@ def _normalize_app_profile(value: str | None) -> str:
         'SOLICITANTE': 'SOLICITANTE',
         'CCM': 'CCM',
         'SIC': 'SIC',
+        'MANUTENCAO': 'MANUTENCAO',
+        'MANUTENÇÃO': 'MANUTENCAO',
     }
     return aliases.get(normalized, normalized)
 
 
 def _allowed_modes_for(base_profile: str) -> list[str]:
     if base_profile == 'ADMIN':
-        return ['SOLICITANTE', 'CCM', 'SIC', 'ADMIN']
+        return ['SOLICITANTE', 'CCM', 'SIC', 'ADMIN', 'MANUTENCAO']
     if base_profile == 'CCM':
         return ['SOLICITANTE', 'CCM', 'SIC']
     if base_profile == 'SIC':
         return ['SIC']
+    if base_profile == 'MANUTENCAO':
+        return ['MANUTENCAO']
     return ['SOLICITANTE']
+
+
+def _is_missing_login_columns_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    login_columns = ("usando_como", "aprovado", "empresa", "area")
+    return (
+        "does not exist" in message
+        and "column" in message
+        and any(column in message for column in login_columns)
+    )
+
+
+def _is_no_rows_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "pgrst116" in message
+        or "json object requested, multiple (or no) rows returned" in message
+        or "0 rows" in message
+        or "no rows" in message
+    )
+
+
+def _fetch_usuario_for_login(supabase: Client, user_id: str) -> dict | None:
+    try:
+        result = (
+            supabase.table("usuarios")
+            .select("id, nome, perfil, usando_como, aprovado, empresa, area")
+            .eq("id", user_id)
+            .single()
+            .execute()
+        )
+        return result.data
+    except PostgrestAPIError as exc:
+        if _is_no_rows_error(exc):
+            return None
+        if not _is_missing_login_columns_error(exc):
+            raise
+
+        logger.warning(
+            "Schema legado detectado em usuarios durante login; aplicando fallback sem colunas novas."
+        )
+        legacy_result = (
+            supabase.table("usuarios")
+            .select("id, nome, perfil, ativo")
+            .eq("id", user_id)
+            .single()
+            .execute()
+        )
+        legacy_user = legacy_result.data
+        if not legacy_user:
+            return None
+
+        legacy_user["aprovado"] = bool(legacy_user.get("ativo", True))
+        legacy_user["empresa"] = None
+        legacy_user["area"] = None
+        legacy_user["usando_como"] = legacy_user.get("perfil")
+        return legacy_user
+    except Exception as exc:
+        if _is_no_rows_error(exc):
+            return None
+        raise
 
 
 def _get_supabase_client() -> Client:
     supabase_url = (os.getenv("SUPABASE_URL") or "").strip()
-    supabase_key = (os.getenv("SUPABASE_KEY") or "").strip()
+    supabase_key = (
+        os.getenv("SUPABASE_KEY")
+        or os.getenv("SUPABASE_ANON_KEY")
+        or os.getenv("SUPABASE_SERVICE_KEY")
+        or ""
+    ).strip()
 
-    if not supabase_url or not supabase_key:
-        raise RuntimeError("Configure SUPABASE_URL e SUPABASE_KEY no arquivo .env do projeto.")
+    missing = []
+    if not supabase_url:
+        missing.append("SUPABASE_URL")
+    if not supabase_key:
+        missing.append("SUPABASE_KEY/SUPABASE_ANON_KEY/SUPABASE_SERVICE_KEY")
+    if missing:
+        raise RuntimeError(f"Configure as variaveis no .env: {', '.join(missing)}")
 
     if "SEU_PROJECT_ID" in supabase_url or "SEU" in supabase_url.upper() or "SEU" in supabase_key.upper():
         raise RuntimeError("Substitua os valores de exemplo do arquivo .env pelos dados reais do Supabase.")
@@ -181,9 +262,9 @@ def debug_usuarios():
     except AuthApiError:
         return jsonify({'erro': 'Falha de autenticacao ao consultar usuarios.'}), 401
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel consultar os dados.'}), 500
+        return jsonify({'erro': 'Não foi possivel consultar os dados.'}), 500
     except Exception:
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
 
 @auth_bp.route("/cadastro", methods=["POST"])
@@ -202,8 +283,8 @@ def cadastro():
 
     try:
         supabase = _get_supabase_client()
-    except RuntimeError:
-        return jsonify({"erro": "Configuracao do Supabase ausente."}), 500
+    except RuntimeError as exc:
+        return jsonify({"erro": f"Falha de configuracao do Supabase: {str(exc)}"}), 500
 
     try:
         resp = supabase.auth.sign_up({
@@ -223,9 +304,9 @@ def cadastro():
         msg_lower = msg.lower()
         if "already registered" in msg_lower or "already exists" in msg_lower or "user already registered" in msg_lower:
             return jsonify({"erro": "Este e-mail ja esta cadastrado."}), 409
-        return jsonify({'erro': 'Nao foi possivel concluir o cadastro. Tente novamente.'}), 500
+        return jsonify({'erro': 'Não foi possivel concluir o cadastro. Tente novamente.'}), 500
     except Exception:
-        return jsonify({'erro': 'Nao foi possivel concluir o cadastro. Tente novamente.'}), 500
+        return jsonify({'erro': 'Não foi possivel concluir o cadastro. Tente novamente.'}), 500
 
     if resp.user is None:
         # sign_up pode retornar user=None quando e-mail já existe mas confirmação está desabilitada
@@ -247,8 +328,8 @@ def login():
 
     try:
         supabase = _get_supabase_client()
-    except RuntimeError:
-        return jsonify({"erro": "Configuracao do Supabase ausente."}), 500
+    except RuntimeError as exc:
+        return jsonify({"erro": f"Falha de configuracao do Supabase: {str(exc)}"}), 500
 
     # 1. Autenticar via Supabase Auth
     try:
@@ -265,23 +346,16 @@ def login():
 
     # 2. Buscar perfil e verificar aprovação
     try:
-        result = (
-            supabase.table("usuarios")
-            .select("id, nome, perfil, usando_como, aprovado, empresa, area")
-            .eq("id", user_id)
-            .single()
-            .execute()
-        )
+        usuario = _fetch_usuario_for_login(supabase, user_id)
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel carregar os dados do usuario.'}), 500
+        return jsonify({'erro': 'Não foi possivel carregar os dados do usuario.'}), 500
     except Exception:
-        return jsonify({"erro": "Nao foi possivel carregar os dados do usuario."}), 500
+        return jsonify({"erro": "Não foi possivel carregar os dados do usuario."}), 500
 
-    usuario = result.data
     if not usuario:
-        return jsonify({"erro": "Usuario nao encontrado."}), 404
+        return jsonify({"erro": "Usuario não encontrado."}), 404
 
-    if not usuario.get("aprovado"):
+    if usuario.get("aprovado") is False:
         return jsonify({"erro": "Acesso pendente. Aguarde a aprovacao do administrador."}), 403
 
     usando_como_db = usuario.get("usando_como") or usuario.get("perfil")
@@ -320,16 +394,16 @@ def atualizar_modo_visualizacao():
     requested_mode = _normalize_app_profile(payload.modo)
     allowed_modes = _allowed_modes_for(base_profile)
     if requested_mode not in allowed_modes:
-        return jsonify({'erro': 'Modo de visualizacao nao permitido para seu perfil.'}), 403
+        return jsonify({'erro': 'Modo de visualizacao não permitido para seu perfil.'}), 403
 
     try:
         supabase = _get_supabase_service_client()
         # usando_como uses app mode codes in DB (SOLICITANTE/CCM/SIC/ADMIN).
         supabase.table('usuarios').update({'usando_como': requested_mode}).eq('id', current_user['id']).execute()
     except PostgrestAPIError:
-        return jsonify({'erro': 'Nao foi possivel atualizar sua visualizacao atual.'}), 500
+        return jsonify({'erro': 'Não foi possivel atualizar sua visualizacao atual.'}), 500
     except Exception:
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
     return jsonify({'mensagem': 'Visualizacao atualizada.', 'usando_como': requested_mode}), 200
 
@@ -351,7 +425,7 @@ def password_reset_request():
     except AuthApiError:
         return jsonify({'mensagem': 'Se o e-mail existir, enviaremos instrucoes para redefinir a senha.'}), 200
     except Exception:
-        return jsonify({'erro': 'Nao foi possivel processar a solicitacao de recuperacao.'}), 500
+        return jsonify({'erro': 'Não foi possivel processar a solicitacao de recuperacao.'}), 500
 
 
 @auth_bp.route('/password-reset/confirm', methods=['POST'])
@@ -370,4 +444,4 @@ def password_reset_confirm():
     except AuthApiError:
         return jsonify({'erro': 'Token invalido ou expirado.'}), 401
     except Exception:
-        return jsonify({'erro': 'Nao foi possivel redefinir a senha.'}), 500
+        return jsonify({'erro': 'Não foi possivel redefinir a senha.'}), 500
