@@ -126,6 +126,41 @@ def listar_usuarios():
         return jsonify({'erro': 'Não foi possivel processar a solicitacao.'}), 500
 
 
+@admin_bp.route("/resumo", methods=["GET"])
+@require_auth(("Administrador",))
+def resumo_admin():
+    try:
+        supabase = _get_supabase_client()
+
+        total_safs = 0
+        try:
+            total_res = (
+                supabase.table("saf_solicitacoes")
+                .select("id", count="exact")
+                .limit(1)
+                .execute()
+            )
+            total_safs = int(getattr(total_res, "count", 0) or 0)
+        except Exception:
+            logger.exception('Falha ao obter contagem exata de SAFs no resumo admin; usando fallback.')
+            fallback = (
+                supabase.table("saf_solicitacoes")
+                .select("id")
+                .execute()
+            )
+            total_safs = len(fallback.data or [])
+
+        return jsonify({"total_safs": total_safs}), 200
+    except AuthApiError:
+        return jsonify({'erro': 'Falha de autenticacao ao consultar resumo administrativo.'}), 401
+    except PostgrestAPIError:
+        logger.exception('Falha PostgREST ao consultar resumo administrativo; retornando zero.')
+        return jsonify({"total_safs": 0}), 200
+    except Exception:
+        logger.exception('Erro interno ao consultar resumo administrativo; retornando zero.')
+        return jsonify({"total_safs": 0}), 200
+
+
 @admin_bp.route("/usuarios/<usuario_id>/aprovar", methods=["POST"])
 @require_auth(("Administrador",))
 def aprovar_usuario(usuario_id):

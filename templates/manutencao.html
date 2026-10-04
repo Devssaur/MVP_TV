@@ -162,15 +162,27 @@
   min-width: 72px;
 }
 .mt-centros-groups-wrap {
-  display: grid;
-  grid-template-columns: repeat(var(--mt-group-cols, 4), minmax(0, max-content));
-  justify-content: start;
-  align-items: start;
-  column-gap: .6rem;
-  row-gap: .35rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .35rem;
   width: auto;
   flex: 1 1 auto;
   min-width: 0;
+}
+.mt-centros-group-row {
+  display: grid;
+  grid-template-columns: repeat(var(--mt-group-cols, 4), minmax(0, max-content));
+  justify-content: center;
+  align-items: start;
+  column-gap: .6rem;
+  row-gap: .35rem;
+}
+.mt-centros-group-divider {
+  height: 1px;
+  background: #d7dde8;
+  width: var(--mt-divider-width, 0px);
 }
 .mt-filter-row { margin-top: 0; margin-bottom: .65rem; }
 .mt-filter-row .equip-filter-select { min-width: 220px; }
@@ -538,49 +550,64 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (!menu) return;
     if (!menu.classList.contains('is-column-mode')) {
       menu.classList.remove('is-compact-controls');
-      menu.style.removeProperty('--mt-group-cols');
+      const wrap = menu.querySelector('.mt-centros-groups-wrap');
+      if (wrap) wrap.style.removeProperty('--mt-group-cols');
       return;
     }
     const cols = [...menu.querySelectorAll('.mt-centros-col')];
     if (!cols.length) {
       menu.classList.remove('is-compact-controls');
-      menu.style.removeProperty('--mt-group-cols');
+      const wrap = menu.querySelector('.mt-centros-groups-wrap');
+      if (wrap) wrap.style.removeProperty('--mt-group-cols');
       return;
     }
-    const colsPerRow = getCentrosColumnsPerRow(menu, cols.length);
-    menu.style.setProperty('--mt-group-cols', String(colsPerRow));
     const forceCompactByWidth = window.innerWidth < 970;
     menu.classList.toggle('is-compact-controls', forceCompactByWidth);
-    fitCentrosColumnsToAvailableWidth(menu);
-  }
-
-  function getCentrosColumnsPerRow(menu, totalCols = 8) {
-    const minCols = 4;
-    const maxCols = 8;
-    const total = Math.max(minCols, Math.min(maxCols, Number(totalCols || 0)));
-    return total;
-  }
-
-  function fitCentrosColumnsToAvailableWidth(menu) {
-    const target = menu || document.getElementById('mt-centros-menu');
-    if (!target) return;
-
-    const wrap = target.querySelector('.mt-centros-groups-wrap');
-    if (!wrap) return;
-
-    const minCols = 4;
-    const cols = [...target.querySelectorAll('.mt-centros-col')];
-    const maxCols = Math.max(minCols, Math.min(8, cols.length || 8));
-
-    let fitted = maxCols;
-    target.style.setProperty('--mt-group-cols', String(fitted));
-
-    while (fitted > minCols) {
-      const overflows = wrap.scrollWidth > (wrap.clientWidth + 1);
-      if (!overflows) break;
-      fitted -= 1;
-      target.style.setProperty('--mt-group-cols', String(fitted));
+    const colsPerRow = getCentrosColumnsPerRow(menu, cols);
+    const wrap = menu.querySelector('.mt-centros-groups-wrap');
+    if (wrap) {
+      wrap.style.setProperty('--mt-group-cols', String(colsPerRow));
+      updateCentrosGroupsDivider(wrap);
     }
+  }
+
+  function getCentrosColumnsPerRow(menu, cols) {
+    const minCols = 4;
+    const maxCols = Math.max(minCols, Math.min(8, (cols || []).length || 8));
+    if (!menu) return maxCols;
+    if (window.innerWidth <= 400) return minCols;
+
+    const isCompact = menu.classList.contains('is-compact-controls');
+    const actionsCol = menu.querySelector('.mt-centros-all-col');
+    const menuWidth = Math.max(0, menu.clientWidth || 0);
+    let available = menuWidth;
+
+    if (!isCompact && actionsCol) {
+      available = Math.max(0, menuWidth - actionsCol.offsetWidth - 14);
+    }
+    if (available <= 0) return minCols;
+
+    const gap = 10;
+    const minColWidth = 86;
+    const estimated = Math.floor((available + gap) / (minColWidth + gap));
+    return Math.max(minCols, Math.min(maxCols, estimated || minCols));
+  }
+
+  function updateCentrosGroupsDivider(wrap) {
+    if (!wrap) return;
+    const divider = wrap.querySelector('.mt-centros-group-divider');
+    const first = wrap.querySelector('.mt-centros-group-row[data-group="1"]');
+    const second = wrap.querySelector('.mt-centros-group-row[data-group="2"]');
+    if (!divider || !first || !second) return;
+    const hasSecond = second.children.length > 0;
+    if (!hasSecond) {
+      divider.style.display = 'none';
+      divider.style.setProperty('--mt-divider-width', '0px');
+      return;
+    }
+    const maxWidth = Math.max(first.offsetWidth || 0, second.offsetWidth || 0);
+    divider.style.display = '';
+    divider.style.width = `${Math.max(0, maxWidth + 10)}px`;
   }
 
   function renderCentrosMenu(data) {
@@ -649,10 +676,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         normalizedCols.length = 8;
       }
 
-      const colsPerRow = getCentrosColumnsPerRow(menu, normalizedCols.length);
+      const colsPerRow = getCentrosColumnsPerRow(menu, normalizedCols);
+      const firstGroup = normalizedCols.slice(0, colsPerRow).join('');
+      const secondGroup = normalizedCols.slice(colsPerRow).join('');
       const colsHtml = `
-        <div class="mt-centros-groups-wrap" style="--mt-group-cols:${colsPerRow};">
-          ${normalizedCols.join('')}
+        <div class="mt-centros-groups-wrap">
+          <div class="mt-centros-group-row" data-group="1">${firstGroup}</div>
+          <div class="mt-centros-group-divider"></div>
+          <div class="mt-centros-group-row" data-group="2">${secondGroup}</div>
         </div>`;
 
       menu.classList.add('is-column-mode');
@@ -1302,8 +1333,16 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   initDateRangePicker();
+  let centrosResizeTimer = null;
   window.addEventListener('resize', function () {
-    requestAnimationFrame(updateCentrosMenuLayout);
+    if (centrosResizeTimer) clearTimeout(centrosResizeTimer);
+    centrosResizeTimer = setTimeout(function () {
+      if (dashboardData) {
+        renderCentrosMenu(dashboardData);
+      } else {
+        requestAnimationFrame(updateCentrosMenuLayout);
+      }
+    }, 80);
   });
   await loadDashboard();
 });

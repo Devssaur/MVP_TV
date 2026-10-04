@@ -16,4 +16,4 @@ services:
       - key: DEV_MODE
         value: "false"
       - key: APP_VERSION
-        value: "0.0.4"
+        value: "0.0.5"
