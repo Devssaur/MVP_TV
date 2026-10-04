@@ -24,15 +24,18 @@ app.logger.setLevel(logging.INFO)
 
 
 def _load_app_version() -> str:
+    try:
+        version = VERSION_PATH.read_text(encoding="utf-8").strip()
+        if version:
+            return version
+    except OSError:
+        pass
+
     env_version = os.environ.get("APP_VERSION", "").strip()
     if env_version:
         return env_version
 
-    try:
-        version = VERSION_PATH.read_text(encoding="utf-8").strip()
-        return version or "0.0.0"
-    except OSError:
-        return "0.0.0"
+    return "0.0.0"
 
 
 APP_VERSION = _load_app_version()

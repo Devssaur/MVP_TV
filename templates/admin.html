@@ -18,7 +18,7 @@
 
   <!-- Stats gerais -->
   <div class="stats-grid" id="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
-    <div class="stat-card">
+    <div class="stat-card" style="border-top:3px solid var(--primary);">
       <div class="stat-value" id="s-usuarios">—</div>
       <div class="stat-label">Usuários Ativos</div>
     </div>
@@ -26,11 +26,11 @@
       <div class="stat-value" id="s-pendentes" style="color:var(--warning);">—</div>
       <div class="stat-label">Aguardando Aprovação</div>
     </div>
-    <div class="stat-card accent">
+    <div class="stat-card accent" style="border-top:3px solid var(--accent);">
       <div class="stat-value" id="s-total-safs">—</div>
       <div class="stat-label">Total SAFs</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="border-top:3px solid var(--info);">
       <div class="stat-value" id="s-logs" style="color:var(--info);">—</div>
       <div class="stat-label">Eventos de Log</div>
     </div>
@@ -195,6 +195,30 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   let allLogs      = [];
   let allUsuarios  = [];
+  const totalSafsEl = document.getElementById('s-total-safs');
+  if (totalSafsEl) totalSafsEl.textContent = '0';
+
+  async function carregarTotalSafsAdmin() {
+    try {
+      let totalSafs = null;
+      const resResumo = await API.resumoAdmin();
+      if (resResumo.ok) {
+        totalSafs = Number(resResumo.data?.total_safs || 0);
+      } else {
+        const resFallback = await API.manutencaoDashboard();
+        if (resFallback.ok) {
+          totalSafs = Number(resFallback.data?.totais?.geral || 0);
+        }
+      }
+      if (totalSafsEl) {
+        totalSafsEl.textContent = (totalSafs == null || Number.isNaN(totalSafs))
+          ? '0'
+          : String(totalSafs);
+      }
+    } catch (_err) {
+      if (totalSafsEl) totalSafsEl.textContent = '0';
+    }
+  }
 
   // ── Labels / badges de perfil ────────────────────
   const EMPRESAS      = { TRIVIA:'MVP SAF', TIC:'Tic Trens', METROBH:'Metrô BH', GOCIL:'Gocil' };
@@ -275,6 +299,8 @@ document.addEventListener('DOMContentLoaded', async function () {
   }
 
   // ── Carrega dados em paralelo ────────────────────
+  await carregarTotalSafsAdmin();
+
   const [resUsers, resLogs] = await Promise.all([
     API.usuarios(),
     API.logs(),
@@ -317,6 +343,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     const rows = list.map(log => {
       const cls = Object.keys(eventoClasses).find(k => (log.evento||'').includes(k));
       const badgeCls = cls ? eventoClasses[cls] : '';
+      let payloadEncoded = '';
+      try {
+        payloadEncoded = JSON.stringify(JSON.stringify(log.payload ?? {}));
+      } catch (_err) {
+        payloadEncoded = JSON.stringify(JSON.stringify({ erro: 'Payload inválido para visualização' }));
+      }
       return `
         <tr>
           <td class="text-muted text-sm" style="white-space:nowrap;">${Fmt.datetime(log.criado_em)}</td>
@@ -324,7 +356,7 @@ document.addEventListener('DOMContentLoaded', async function () {
           <td class="text-sm">${log.usuario_id ? log.usuario_id.substring(0,8) + '…' : '—'}</td>
           <td>
             ${log.payload
-              ? `<button class="btn btn-ghost btn-sm" onclick="showPayload(${JSON.stringify(JSON.stringify(log.payload))})">🔍 Ver</button>`
+              ? `<button class="btn btn-ghost btn-sm" onclick="showPayload(${payloadEncoded})">🔍 Ver</button>`
               : '<span class="text-muted text-xs">—</span>'}
           </td>
         </tr>`;
@@ -348,8 +380,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('logs-body').innerHTML =
       `<tr><td colspan="4" style="color:var(--danger);text-align:center;padding:1.5rem;">${resLogs.data.erro || 'Erro ao carregar logs.'}</td></tr>`;
   }
-
-  document.getElementById('s-total-safs').textContent = '—';
 
   // ── Tabs ──────────────────────────────────────────
   document.querySelectorAll('[data-tab]').forEach(tab => {

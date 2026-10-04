@@ -235,6 +235,7 @@ const API = (() => {
     },
 
     // Admin
+    resumoAdmin:      ()               => request('GET',  '/admin/resumo'),
     logs:             ()               => request('GET',  '/admin/logs'),
     usuarios:         ()               => request('GET',  '/admin/usuarios'),
     aprovarUsuario:   (id, aprovado, perfil, ator_id) => request('POST', `/admin/usuarios/${id}/aprovar`, { aprovado, perfil, ator_id }),
